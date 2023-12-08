@@ -19,7 +19,7 @@ using namespace std;
 #define Set_UP_B_fail -3
 
 /*解算结果存储类*/
-class Result_DATA
+class DATA_SET
 {
 public:
 	GPSTIME *OBSTIME;	// 观测时间
@@ -47,7 +47,7 @@ public:
 	/*KalmanFilter*/
 	KalmanFilter *KF;
 
-	Result_DATA();
+	DATA_SET();
 	void reset();
 	int OUTPUT();				// 控制台输出
 	int WRITEOUTPUT(FILE *fpr); // 文件输出
@@ -68,9 +68,9 @@ public:
 int createDirectory(string path);
 
 /*网口下解码*/
-int decodestream(Result_DATA *result, unsigned char Buff[], int &d);
+int decodestream(DATA_SET *result, unsigned char Buff[], int &d);
 
 // SPP单点定位KF
-unsigned int KF_SPP(Result_DATA *data, double dt_e, bool first_flag);
+unsigned int KF_SPP(DATA_SET *data, double dt_e, bool first_flag);
 
-unsigned int KF_1(Result_DATA *data, bool first_flag, double T);
+unsigned int KF_1(DATA_SET *data, bool first_flag, double T);

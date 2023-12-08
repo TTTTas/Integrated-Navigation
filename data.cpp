@@ -3,7 +3,7 @@
 #include <io.h>
 #include <direct.h>
 
-Result_DATA::Result_DATA()
+DATA_SET::DATA_SET()
 {
 	OBSTIME = new GPSTIME();
 	Pos = new MatrixXd();
@@ -44,7 +44,7 @@ Result_DATA::Result_DATA()
 	Real_Pos = new XYZ(-2267807.853, 5009320.431, 3221020.875);
 }
 
-void Result_DATA::reset()
+void DATA_SET::reset()
 {
 	for (vector<Satellate*>::iterator it = range->GPS_SATE.begin(); it != range->GPS_SATE.end(); it++)
 	{
@@ -66,69 +66,41 @@ void Result_DATA::reset()
 	range->BDS_SATE.clear();
 }
 
-int Result_DATA::OUTPUT()
+int DATA_SET::OUTPUT()
 {
-	BLH* blh = new BLH();
-	XYZ* xyz = new XYZ();
-	XYZ* enu = new XYZ();
-	MatrixXd R(3, 3);
+	XYZ xyz = get_XYZ(( * Pos).block(0, 0, 3, 1));
+	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
+	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
+	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
 	double m_H, m_V, B, L;
+	Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
+	m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
+	m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (solve_result)
 	{
 	case Success:
-		xyz->X = (*Pos)(0, 0);
-		xyz->Y = (*Pos)(1, 0);
-		xyz->Z = (*Pos)(2, 0);
-		XYZ2BLH(blh, xyz, WGS84_e2, WGS84_a);
-		XYZ2ENU(Real_Pos, xyz, enu, SYS_GPS);
-		B = degree2rad(blh->Lat);
-		L = degree2rad(blh->Lon);
-		R(0, 0) = -sin(L);
-		R(0, 1) = cos(L);
-		R(0, 2) = 0;
-		R(1, 0) = -sin(B) * cos(L);
-		R(1, 1) = -sin(B) * sin(L);
-		R(1, 2) = cos(B);
-		R(2, 0) = cos(B) * cos(L);
-		R(2, 1) = cos(B) * sin(L);
-		R(2, 2) = sin(B);
-		Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
-		m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
-		m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tBDS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
-			(*Pos)(0, 0), (*Pos)(1, 0), (*Pos)(2, 0),
-			blh->Lat, blh->Lon, blh->Height,
-			enu->X, enu->Y, enu->Z,
+			xyz.X,xyz.Y,xyz.Z,
+			blh.Lat, blh.Lon, blh.Height,
+			enu.X, enu.Y, enu.Z,
 			(*Pos)(3, 0), (*Pos)(4, 0),
 			m_H, m_V,
 			(*Vel)(0, 0), (*Vel)(1, 0), (*Vel)(2, 0), (*Vel)(3, 0),
 			*thegma_Pos, *thegma_Vel, *PDOP,
 			GPS_num, BDS_num,
 			SATES->c_str());
-		delete blh;
-		delete xyz;
-		delete enu;
 		return 1;
 		break;
 	case OBS_DATA_Loss:
 		printf("GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
 		return 0;
 	case Epoch_Loss:
 		printf("GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
 		return 0;
 	case Set_UP_B_fail:
 		printf("GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
 		return 0;
 	default:
 		break;
@@ -136,69 +108,41 @@ int Result_DATA::OUTPUT()
 	return 0;
 }
 
-int Result_DATA::WRITEOUTPUT(FILE* fpr)
+int DATA_SET::WRITEOUTPUT(FILE* fpr)
 {
-	BLH* blh = new BLH();
-	XYZ* xyz = new XYZ();
-	XYZ* enu = new XYZ();
-	MatrixXd R(3, 3);
+	XYZ xyz = get_XYZ((*Pos).block(0, 0, 3, 1));
+	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
+	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
+	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
-	double m_H, m_V, B, L;
+	double m_H, m_V;
+	Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
+	m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
+	m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (solve_result)
 	{
 	case Success:
-		xyz->X = (*Pos)(0, 0);
-		xyz->Y = (*Pos)(1, 0);
-		xyz->Z = (*Pos)(2, 0);
-		XYZ2BLH(blh, xyz, WGS84_e2, WGS84_a);
-		XYZ2ENU(Real_Pos, xyz, enu, SYS_GPS);
-		B = degree2rad(blh->Lat);
-		L = degree2rad(blh->Lon);
-		R(0, 0) = -sin(L);
-		R(0, 1) = cos(L);
-		R(0, 2) = 0;
-		R(1, 0) = -sin(B) * cos(L);
-		R(1, 1) = -sin(B) * sin(L);
-		R(1, 2) = cos(B);
-		R(2, 0) = cos(B) * cos(L);
-		R(2, 1) = cos(B) * sin(L);
-		R(2, 2) = sin(B);
-		Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
-		m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
-		m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
-		fprintf(fpr, "GPSTIME:%d\t%.3f\tXYZ:%.4f\t%.4f\t%.4f\tBLH:%8.4f\t%8.4f\t%7.4f\tENU:%7.4f\t%7.4f\t%7.4f\tGPS Clk:%7.4f\tBDS Clk:%7.4f\tm_H:%7.4f\tm_V:%7.4f\tVelocity:%8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P:%6.4f\tthegma_V:%6.4f\tPDOP:%6.4f\tGPS:%2d\tBDS:%2d\t%s\n",
+		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tBDS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
-			(*Pos)(0, 0), (*Pos)(1, 0), (*Pos)(2, 0),
-			blh->Lat, blh->Lon, blh->Height,
-			enu->X, enu->Y, enu->Z,
+			xyz.X, xyz.Y, xyz.Z,
+			blh.Lat, blh.Lon, blh.Height,
+			enu.X, enu.Y, enu.Z,
 			(*Pos)(3, 0), (*Pos)(4, 0),
 			m_H, m_V,
 			(*Vel)(0, 0), (*Vel)(1, 0), (*Vel)(2, 0), (*Vel)(3, 0),
 			*thegma_Pos, *thegma_Vel, *PDOP,
 			GPS_num, BDS_num,
 			SATES->c_str());
-		delete blh;
-		delete xyz;
-		delete enu;
 		return 1;
 		break;
 	case OBS_DATA_Loss:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
+		printf("GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Epoch_Loss:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
+		printf("GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Set_UP_B_fail:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		delete blh;
-		delete xyz;
-		delete enu;
+		printf("GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	default:
 		break;
@@ -206,9 +150,22 @@ int Result_DATA::WRITEOUTPUT(FILE* fpr)
 	return 0;
 }
 
-void Result_DATA::KF_Print()
-{
-	cout << KF->getState().transpose() << endl;
+void DATA_SET::KF_Print()
+{	
+	XYZ xyz = get_XYZ(KF->getState().block(0, 0, 3, 1));
+	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
+	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
+	double Rcv_t = KF->getState()(3, 0);
+	XYZ Vel = get_XYZ(KF->getState().block(4, 0, 3, 1));
+	double Rcv_t_v = KF->getState()(7, 0);
+	printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\n",
+		OBSTIME->Week, OBSTIME->SecOfWeek,
+		xyz.X, xyz.Y, xyz.Z,
+		blh.Lat, blh.Lon, blh.Height,
+		enu.X, enu.Y, enu.Z,
+		Rcv_t,
+		Vel.X, Vel.Y, Vel.Z,
+		Rcv_t_v);
 }
 
 const char* Configure::NetIP = "8.140.46.126";
@@ -234,7 +191,7 @@ int createDirectory(string path)
 	return 0;
 }
 
-int decodestream(Result_DATA* result, unsigned char Buff[], int& d)
+int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
 {
 	unsigned char TempBuff[MAXRAWLEN];
 	int len;

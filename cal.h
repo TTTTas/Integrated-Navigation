@@ -45,7 +45,7 @@ using namespace std;
 #define P0 1013.25
 #define RH0 0.5
 
-/*粗茶探测阈值*/
+/*粗差探测阈值*/
 #define GF_THRESH 0.05
 #define MW_THRESH 10
 
@@ -81,16 +81,16 @@ double TGD(EPHEMERIS *e, double f, int sys);
 unsigned int SAT_POS_CAL(double t, EPHEMERIS *eph, XYZ *xyz, double &clk, double dt, int SYS);
 
 // 卫星高度角计算
-double Ele_Angle(XYZ *SatPos, XYZ *RcvPos, int sys);
+double Ele_Angle(XYZ SatPos, XYZ RcvPos, int sys);
 
 // Hopefiled对流层改正(m)
 double Hopefield(double E, double H);
 
 // Hopefiled对流层改正(m)
-double Hopefield(XYZ *SatPos, XYZ *RcvPos, int sys);
+double Hopefield(XYZ SatPos, XYZ RcvPos, int sys);
 
 /*Klobuchar模型改正电离层*/
-double Klobuchar(XYZ *RcvPos, double E, double A, double alpha[4], double beta[4], double UT, double code, int sys);
+double Klobuchar(XYZ RcvPos, double E, double A, double alpha[4], double beta[4], double UT, double code, int sys);
 
 /*一致性检验*/
 int CheckOBSConsist(Satellate *sate, int sys, double t, int index, bool &PSE_flag, bool &PHA_flag);
@@ -109,13 +109,13 @@ unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sate
 unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
 
 // 单星解算
-unsigned int Cal_1(Result_DATA *data, OBS_DATA *obs, EPOCH *eph, bool first_flag);
+unsigned int Cal_1(DATA_SET *data, OBS_DATA *obs, EPOCH *eph, bool first_flag);
 
 // GPS、BDS双星解算
-unsigned int Cal_2(Result_DATA *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, bool first_flag);
+unsigned int Cal_2(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, bool first_flag);
 
 // SPP单点定位
-unsigned int Cal_SPP(Result_DATA *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, double dt_e, bool first_flag);
+unsigned int Cal_SPP(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, double dt_e, bool first_flag);
 
 /*网口下位置解算*/
 // 搭建位置解算构造矩阵(双频)
@@ -128,10 +128,10 @@ unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sate
 unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
 
 // 单星解算
-unsigned int Cal_1(Result_DATA *data, bool first_flag);
+unsigned int Cal_1(DATA_SET *data, bool first_flag);
 
 // GPS、BDS双星解算
-unsigned int Cal_2(Result_DATA *data, bool first_flag);
+unsigned int Cal_2(DATA_SET *data, bool first_flag);
 
 // SPP单点定位
-unsigned int Cal_SPP(Result_DATA *data, double dt_e, bool first_flag);
+unsigned int Cal_SPP(DATA_SET *data, double dt_e, bool first_flag);

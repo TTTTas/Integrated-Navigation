@@ -27,7 +27,7 @@ int main()
     /*存储变量初始化*/
     initial();
     /*结果存储变量*/
-    Result_DATA *result = new Result_DATA();
+    DATA_SET *result = new DATA_SET();
     /*初始判断变量*/
     double dt_epoch = 1; // 文件流历元间时间差
     double temp_t = 0;

@@ -100,15 +100,15 @@ MatrixXd getz(MatrixXd l_P, MatrixXd l_V)
 	return z;
 }
 
-MatrixXd Result_DATA::Initial_KF()
+MatrixXd DATA_SET::Initial_KF()
 {
 	MatrixXd B, l_Pos, l_Vel;
-	XYZ* sate_pos0 = new XYZ();
-	XYZ* sate_pos1 = new XYZ();
+	XYZ sate_pos0;
+	XYZ sate_pos1;
 	double clk0 = 0;
 	double clk1 = 0;
 	double velocity[4] = { 0, 0, 0, 0 };
-	XYZ* RcvPos = new XYZ(KF->getState()(0, 0), KF->getState()(1, 0), KF->getState()(2, 0));
+	XYZ RcvPos = get_XYZ(KF->getState().block(0, 0, 3, 1));
 	double dt_Rcv = KF->getState()(3, 0);
 	MatrixXd B_new = MatrixXd::Zero(1, 4);
 	MatrixXd l_new = MatrixXd::Zero(1, 1);
@@ -142,13 +142,13 @@ MatrixXd Result_DATA::Initial_KF()
 		for (int j = 0; j < 3; j++)
 		{
 			clk0 = CORRECT_CLK(ts - clk0, GPS_eph[prn - 1]);
-			SAT_POS_CAL(ts - clk0, GPS_eph[prn - 1], sate_pos0, clk0, Sate->PSERA[0] / velocity_c, Sate->SYS);
+			SAT_POS_CAL(ts - clk0, GPS_eph[prn - 1], &sate_pos0, clk0, Sate->PSERA[0] / velocity_c, Sate->SYS);
 			clk1 = CORRECT_CLK(ts - clk1 + 1e-3, GPS_eph[prn - 1]);
-			SAT_POS_CAL(ts - clk0 + 1e-3, GPS_eph[prn - 1], sate_pos0, clk0, Sate->PSERA[0] / velocity_c, Sate->SYS);
+			SAT_POS_CAL(ts - clk0 + 1e-3, GPS_eph[prn - 1], &sate_pos0, clk0, Sate->PSERA[0] / velocity_c, Sate->SYS);
 		}
-		velocity[0] = (sate_pos1->X - sate_pos0->X) / 1e-3;
-		velocity[1] = (sate_pos1->Y - sate_pos0->Y) / 1e-3;
-		velocity[2] = (sate_pos1->Z - sate_pos0->Z) / 1e-3;
+		velocity[0] = (sate_pos1.X - sate_pos0.X) / 1e-3;
+		velocity[1] = (sate_pos1.Y - sate_pos0.Y) / 1e-3;
+		velocity[2] = (sate_pos1.Z - sate_pos0.Z) / 1e-3;
 		velocity[3] = (clk1 - clk0) * velocity_c / 1e-3;
 		if (Ele_Angle(sate_pos0, RcvPos, Sate->SYS) < degree2rad(10))
 			continue;
@@ -160,17 +160,17 @@ MatrixXd Result_DATA::Initial_KF()
 			IF = (Sate->PSERA[Index2] - k_1_3 * Sate->PSERA[Index1]) / (1 - k_1_3) + velocity_c * k_1_3 * GPS_eph[prn - 1]->T_GD1 / (1 - k_1_3);
 		}
 		double lamda = (1e-6 * velocity_c / L1);
-		double len = sqrt(SQR(RcvPos->X - sate_pos0->X) + SQR(RcvPos->Y - sate_pos0->Y) + SQR(RcvPos->Z - sate_pos0->Z));
+		double len = sqrt(SQR(RcvPos.X - sate_pos0.X) + SQR(RcvPos.Y - sate_pos0.Y) + SQR(RcvPos.Z - sate_pos0.Z));
 		double w_pos = IF - (len + dt_Rcv - velocity_c * clk0 + Hopefield(sate_pos0, RcvPos, Sate->SYS));
 		if (abs(w_pos) > 10)
 			continue;
-		double v0 = ((sate_pos0->X - RcvPos->X) * velocity[0] + (sate_pos0->Y - RcvPos->Y) * velocity[1] + (sate_pos0->Z - RcvPos->Z) * velocity[2]) / len;
+		double v0 = ((sate_pos0.X - RcvPos.X) * velocity[0] + (sate_pos0.Y - RcvPos.Y) * velocity[1] + (sate_pos0.Z - RcvPos.Z) * velocity[2]) / len;
 		double w_Vel = -lamda * Sate->DOPPLER[Index1] - (v0 - velocity[3]);
 		if (abs(w_Vel) > 10)
 			continue;
-		double l = (RcvPos->X - sate_pos0->X) / len;
-		double m = (RcvPos->Y - sate_pos0->Y) / len;
-		double n = (RcvPos->Z - sate_pos0->Z) / len;
+		double l = (RcvPos.X - sate_pos0.X) / len;
+		double m = (RcvPos.Y - sate_pos0.Y) / len;
+		double n = (RcvPos.Z - sate_pos0.Z) / len;
 		B_new(0, 0) = l;
 		B_new(0, 1) = m;
 		B_new(0, 2) = n;
@@ -184,8 +184,6 @@ MatrixXd Result_DATA::Initial_KF()
 		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
 		l_Vel.bottomRows(1) = l_new;
 	}
-	delete sate_pos0;
-	delete RcvPos;
 	if (B.rows() == 0)
 		return MatrixXd::Identity(1, 1) * -1;
 	KF->set_H(getH(B, B));
@@ -193,7 +191,7 @@ MatrixXd Result_DATA::Initial_KF()
 	return getz(l_Pos, l_Vel);
 }
 
-unsigned int KF_SPP(Result_DATA* data, double dt_e, bool first_flag)
+unsigned int KF_SPP(DATA_SET* data, double dt_e, bool first_flag)
 {
 	data->OBSTIME = data->range->OBS_TIME;
 	if (data->range->GPS_SATE.size() + data->range->BDS_SATE.size() < 5)
@@ -243,8 +241,8 @@ unsigned int KF_SPP(Result_DATA* data, double dt_e, bool first_flag)
 			return 0;
 		MatrixXd state(8, 1);
 		state.block(0, 0, 3, 1) = data->Pos->block(0, 0, 3, 1);
-		state.block(3, 0, 3, 1) = data->Vel->block(0, 0, 3, 1);
-		state(6, 0) = (*data->Pos)(3, 0);
+		state.block(4, 0, 3, 1) = data->Vel->block(0, 0, 3, 1);
+		state(3, 0) = (*data->Pos)(3, 0);
 		state(7, 0) = (*data->Vel)(3, 0);
 		data->KF->setState(state);
 	}
@@ -284,7 +282,7 @@ unsigned int KF_SPP(Result_DATA* data, double dt_e, bool first_flag)
 	return 1;
 }
 
-unsigned int KF_1(Result_DATA* data, bool first_flag, double T)
+unsigned int KF_1(DATA_SET* data, bool first_flag, double T)
 {
 	data->KF->set_A(getA(T));
 	data->KF->set_Q(getQ(T));

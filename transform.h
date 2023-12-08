@@ -16,7 +16,7 @@ using namespace Eigen;
 
 #pragma region 时间域
 /*世界时*/
-struct UTC
+typedef struct UTC
 {
 	unsigned short Year;		
 	unsigned short Month;
@@ -40,7 +40,7 @@ struct UTC
 	}
 };
 /*简化儒略日*/
-struct MJD
+typedef struct MJD
 {
 	int Days;
 	double FracDay;
@@ -52,7 +52,7 @@ struct MJD
 	}
 };
 /*GPS时*/
-struct GPSTIME
+typedef struct GPSTIME
 {
 	unsigned short Week;
 	double SecOfWeek;
@@ -68,41 +68,27 @@ struct GPSTIME
 		SecOfWeek = s;
 	}
 };
-/*北斗时*/
-struct BDSTIME
-{
-	unsigned short Week;
-	double SecOfWeek;
-
-	BDSTIME()
-	{
-		Week = 0;
-		SecOfWeek = 0.0;
-	}
-};
 /*时间相互转化函数*/
-void TIME2MJD(UTC* utc, MJD* mjd);
+MJD UTC2MJD(UTC utc);
 
-void MJD2TIME(UTC* utc, MJD* mjd);
+UTC MJD2UTC(MJD mjd);
 
-void MJD2GPSTIME(MJD* mjd, GPSTIME* gpst);
+GPSTIME MJD2GPSTIME(MJD mjd);
 
-void GPSTIME2MJD(MJD* mjd, GPSTIME* gpst);
+MJD GPSTIME2MJD(GPSTIME gpst);
 
-void GPSTIME2BDSTIME(GPSTIME* gpst, GPSTIME* bdst);
+GPSTIME GPSTIME2BDSTIME(GPSTIME gpst);
 
-void GPSTIME2BDSTIME(GPSTIME* gpst, BDSTIME* bdst);
+GPSTIME BDSTIME2GPSTIME(GPSTIME bdst);
 
-void BDSTIME2GPSTIME(GPSTIME* gpst, BDSTIME* bdst);
-
-void GPSTIME2TIME(GPSTIME* gpst, UTC* utc);
+UTC GPSTIME2UTC(GPSTIME gpst);
 
 
 #pragma endregion
 
 #pragma region 坐标域
 /*XYZ坐标系*/
-struct XYZ
+typedef struct XYZ
 {
 	double X;		//m
 	double Y;		//m
@@ -119,7 +105,7 @@ struct XYZ
 	}
 };
 /*大地坐标系*/
-struct BLH
+typedef struct BLH
 {
 	double Lon;				//经度,deg
 	double Lat;				//纬度,deg
@@ -137,15 +123,25 @@ struct BLH
 	}
 };
 /*坐标系转换*/
-void BLH2XYZ(BLH* blh, XYZ* xyz, double e2, double a);
+XYZ BLH2XYZ(BLH blh, double e2, double a);
 
-void XYZ2BLH(BLH* blh, XYZ* xyz, double e2, double a);
+BLH XYZ2BLH(XYZ xyz, double e2, double a);
 
 //转化为当地坐标系
 /*****************************/
 //	xyz1: 站心在xyz坐标系下坐标
 //	xyz2: 目标在xyz坐标系下坐标
-double XYZ2ENU(XYZ* xyz1, XYZ* xyz2, XYZ* enu, int sys);
+XYZ XYZ2ENU(XYZ xyz1, XYZ xyz2, int sys);
+
+MatrixXd get_Rot(double B, double L);
+
+MatrixXd get_XYZ(XYZ xyz);
+
+MatrixXd get_BLH(BLH blh);
+
+XYZ get_XYZ(MatrixXd xyz);
+
+BLH get_BLH(MatrixXd blh);
 #pragma endregion
 
 

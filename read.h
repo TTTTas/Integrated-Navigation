@@ -28,7 +28,7 @@ using namespace std;
 
 #pragma endregion
 
-struct Result_DATA;
+struct DATA_SET;
 
 struct Satellate
 {
