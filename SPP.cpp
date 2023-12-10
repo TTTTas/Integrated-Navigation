@@ -32,6 +32,7 @@ int main()
     double dt_epoch = 1; // 文件流历元间时间差
     double temp_t = 0;
     bool first = true; // 第一次解算标志
+    bool KF_first = true;
     FILE *DATA_Fobs;   // log文件指针
     FILE *Pos_Fobs;    // pos文件指针
     /*网口输入数据相关变量*/
@@ -64,6 +65,8 @@ int main()
     FILE *tempfile;
     string path = "D:/GitHub/SPP_Design/报告/双频双系统.pos";
 
+    FILE* KF_file;
+
     switch (choice)
     {
     case 1:
@@ -79,8 +82,8 @@ int main()
                 dt_epoch = RANGE[i]->OBS_TIME->SecOfWeek - RANGE[i - 1]->OBS_TIME->SecOfWeek;
             if (Cal_SPP(result, RANGE[i], GPS_EPH, BDS_EPH, dt_epoch, first))
                 first = false;
-            result->OUTPUT();
-            result->WRITEOUTPUT(tempfile);
+            result->LS_print();
+            result->LS_Filewrite(tempfile);
         }
         fclose(tempfile);
         break;
@@ -100,12 +103,17 @@ int main()
             printf("The pos file %s was not opened\n", CfgInfo.ResDatFile);
             exit(0);
         }
+        if ((KF_file = fopen("KF.pos", "w")) == NULL)
+        {
+            printf("The pos file %s was not opened\n", "KF.pos");
+            exit(0);
+        }
         while (1)
         {
             Sleep(980);
             if ((lenR = recv(NetGps, (char *)curbuff, MAXRAWLEN, 0)) > 0) // 读取数据
             {
-                printf("%5d ", lenR);
+                printf("%5d\n", lenR);
                 fwrite(curbuff, sizeof(unsigned char), lenR, DATA_Fobs); // 记录二进制数据流到文件中
 
                 if ((lenD + lenR) > 2 * MAXRAWLEN)
@@ -128,14 +136,18 @@ int main()
                     if (dt_epoch == 0)
                         break;
                     temp_t = result->OBSTIME->SecOfWeek;
-                     //if (Cal_SPP(result, dt_epoch, first))
-                     //    first = false;
-                     //result->OUTPUT();              // 输出至控制台
-                     //result->WRITEOUTPUT(Pos_Fobs); // 输出至文件
-
-                    if (KF_SPP(result, dt_epoch, first))
+                    if (Cal_SPP(result, dt_epoch, first))
+                    {
                         first = false;
-                    result->KF_Print();
+                        cout << "LS" << endl;
+                        if (KF_SPP(result, dt_epoch, KF_first))
+                            KF_first = false;
+                     }
+                     result->LS_print();              // 输出至控制台
+                     result->LS_Filewrite(Pos_Fobs); // 输出至文件
+
+ 
+                    result->KF_Print(KF_file);
 
                     result->reset();
                 }

@@ -25,6 +25,8 @@ public:
 
     MatrixXd getState() const;
 
+    MatrixXd getState_minus();
+
 private:
     MatrixXd A_; // 状态转移矩阵
     MatrixXd Q_; // 过程噪声协方差

@@ -40,7 +40,10 @@ DATA_SET::DATA_SET()
 
 	solve_result = UN_Solve;
 
-	KF = new KalmanFilter(MatrixXd::Zero(8, 1), MatrixXd::Identity(8, 8));
+	MatrixXd P_ = MatrixXd::Zero(8, 8);
+	P_.block(0, 0, 4, 4) = MatrixXd::Identity(4, 4) * 10 * 10;
+	P_.block(4, 4, 4, 4) = MatrixXd::Identity(4, 4) * 0.1 * 0.1;
+	KF = new KalmanFilter(MatrixXd::Zero(8, 1), P_);
 	Real_Pos = new XYZ(-2267807.853, 5009320.431, 3221020.875);
 }
 
@@ -66,7 +69,7 @@ void DATA_SET::reset()
 	range->BDS_SATE.clear();
 }
 
-int DATA_SET::OUTPUT()
+int DATA_SET::LS_print()
 {
 	XYZ xyz = get_XYZ(( * Pos).block(0, 0, 3, 1));
 	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
@@ -108,7 +111,7 @@ int DATA_SET::OUTPUT()
 	return 0;
 }
 
-int DATA_SET::WRITEOUTPUT(FILE* fpr)
+int DATA_SET::LS_Filewrite(FILE* fpr)
 {
 	XYZ xyz = get_XYZ((*Pos).block(0, 0, 3, 1));
 	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
@@ -150,7 +153,7 @@ int DATA_SET::WRITEOUTPUT(FILE* fpr)
 	return 0;
 }
 
-void DATA_SET::KF_Print()
+void DATA_SET::KF_Print(FILE* fpr)
 {	
 	XYZ xyz = get_XYZ(KF->getState().block(0, 0, 3, 1));
 	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
@@ -159,6 +162,14 @@ void DATA_SET::KF_Print()
 	XYZ Vel = get_XYZ(KF->getState().block(4, 0, 3, 1));
 	double Rcv_t_v = KF->getState()(7, 0);
 	printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\n",
+		OBSTIME->Week, OBSTIME->SecOfWeek,
+		xyz.X, xyz.Y, xyz.Z,
+		blh.Lat, blh.Lon, blh.Height,
+		enu.X, enu.Y, enu.Z,
+		Rcv_t,
+		Vel.X, Vel.Y, Vel.Z,
+		Rcv_t_v);
+	fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\n",
 		OBSTIME->Week, OBSTIME->SecOfWeek,
 		xyz.X, xyz.Y, xyz.Z,
 		blh.Lat, blh.Lon, blh.Height,

@@ -49,9 +49,9 @@ public:
 
 	DATA_SET();
 	void reset();
-	int OUTPUT();				// 控制台输出
-	int WRITEOUTPUT(FILE *fpr); // 文件输出
-	void KF_Print();
+	int LS_print();				// 控制台输出
+	int LS_Filewrite(FILE *fpr); // 文件输出
+	void KF_Print(FILE *fpr);
 	MatrixXd Initial_KF();
 };
 /*网口和存储结构相关配置*/
@@ -73,4 +73,4 @@ int decodestream(DATA_SET *result, unsigned char Buff[], int &d);
 // SPP单点定位KF
 unsigned int KF_SPP(DATA_SET *data, double dt_e, bool first_flag);
 
-unsigned int KF_1(DATA_SET *data, bool first_flag, double T);
+unsigned int KF_1(DATA_SET *data, double T);
