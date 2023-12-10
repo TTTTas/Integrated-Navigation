@@ -1,18 +1,9 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <vector>
+#include "Common_value.h"
 using namespace std;
 using namespace Eigen;
-
-/*地球椭球相关参数*/
-#define WGS84_e2 0.0066943799013
-#define WGS84_a 6378137.0
-#define CGCS2000_e2 0.00669438002290
-#define CGCS2000_a 6378137.0
-#define Pi 3.1415926
-/*system IDs*/
-#define SYS_GPS         0
-#define SYS_BDS         4
 
 #pragma region 时间域
 /*世界时*/

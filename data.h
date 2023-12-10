@@ -1,8 +1,11 @@
 #pragma once
 #include <Eigen/Dense>
+#include "Common_value.h"
 #include "transform.h"
 #include "KF.h"
+#include "LS.h"
 #include "read.h"
+#include "Configure.h"
 #include <string>
 #include <vector>
 using namespace Eigen;
@@ -10,13 +13,6 @@ using namespace std;
 
 #define GPS_SAT_QUAN 32
 #define BDS_SAT_QUAN 63
-
-/*解算结果*/
-#define UN_Solve 0
-#define Success 1
-#define Epoch_Loss -1
-#define OBS_DATA_Loss -2
-#define Set_UP_B_fail -3
 
 /*解算结果存储类*/
 class DATA_SET
@@ -37,6 +33,21 @@ public:
 	int solve_result;	// 解算结果
 	XYZ *Real_Pos;		// 参考真值
 
+	/*卫星粗差探测存储变量*/
+	double GPS_GF[GPS_SAT_QUAN];
+	double GPS_MW[GPS_SAT_QUAN];
+	double GPS_PSE[6][GPS_SAT_QUAN];
+	double GPS_PHA[6][GPS_SAT_QUAN];
+	double GPS_DOP[6][GPS_SAT_QUAN];
+	int GPS_COUNT[GPS_SAT_QUAN];
+
+	double BDS_GF[BDS_SAT_QUAN];
+	double BDS_MW[BDS_SAT_QUAN];
+	double BDS_PSE[5][BDS_SAT_QUAN];
+	double BDS_PHA[5][BDS_SAT_QUAN];
+	double BDS_DOP[5][BDS_SAT_QUAN];
+	int BDS_COUNT[BDS_SAT_QUAN];
+
 	/*观测值数据*/
 	OBS_DATA *range;
 
@@ -44,31 +55,34 @@ public:
 	EPHEMERIS *GPS_eph[GPS_SAT_QUAN];
 	EPHEMERIS *BDS_eph[BDS_SAT_QUAN];
 
+	/*Least_Square*/
+	Least_Squares *LS;
+
 	/*KalmanFilter*/
 	KalmanFilter *KF;
 
 	DATA_SET();
+
 	void reset();
+
 	int LS_print();				// 控制台输出
 	int LS_Filewrite(FILE *fpr); // 文件输出
 	void KF_Print(FILE *fpr);
-	MatrixXd Initial_KF();
-};
-/*网口和存储结构相关配置*/
-class Configure
-{
-public:
-	static const char *NetIP;			 // IP
-	static const unsigned short NetPort; // 端口
-	const char *ObsDatFile;				 // log文件路径
-	const char *ResDatFile;				 // pos文件路径
+
+	MatrixXd Set_KF();
+	int Set_LS();
+
+	/*一致性检验*/
+	int CheckOBSConsist(Satellate* sate, int sys, double t, int index, bool& PSE_flag, bool& PHA_flag);
+
+	/*粗差探测*/
+	int DetectOutlier(Satellate* sate, int sys, double t, int index1, int index2);
+
+	void DetectOut(Configure cfg, double dt_e);
 };
 
 /*创建文件夹*/
 int createDirectory(string path);
-
-/*网口下解码*/
-int decodestream(DATA_SET *result, unsigned char Buff[], int &d);
 
 // SPP单点定位KF
 unsigned int KF_SPP(DATA_SET *data, double dt_e, bool first_flag);

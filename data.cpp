@@ -31,14 +31,20 @@ DATA_SET::DATA_SET()
 	range->OBS_TIME = new GPSTIME();
 	for (int i = 0; i < GPS_SAT_QUAN; i++)
 	{
+		GPS_GF[i] = 0;
+		GPS_MW[i] = 0;
 		GPS_eph[i] = new EPHEMERIS();
 	}
 	for (int i = 0; i < BDS_SAT_QUAN; i++)
 	{
+		BDS_GF[i] = 0;
+		BDS_MW[i] = 0;
 		BDS_eph[i] = new EPHEMERIS();
 	}
 
 	solve_result = UN_Solve;
+	
+	LS = new Least_Squares();
 
 	MatrixXd P_ = MatrixXd::Zero(8, 8);
 	P_.block(0, 0, 4, 4) = MatrixXd::Identity(4, 4) * 10 * 10;
@@ -82,7 +88,7 @@ int DATA_SET::LS_print()
 	m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (solve_result)
 	{
-	case Success:
+	case Success_Solve:
 		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tBDS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X,xyz.Y,xyz.Z,
@@ -124,7 +130,7 @@ int DATA_SET::LS_Filewrite(FILE* fpr)
 	m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (solve_result)
 	{
-	case Success:
+	case Success_Solve:
 		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tBDS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
@@ -179,8 +185,6 @@ void DATA_SET::KF_Print(FILE* fpr)
 		Rcv_t_v);
 }
 
-const char* Configure::NetIP = "8.140.46.126";
-const unsigned short Configure::NetPort = 5002;
 
 int createDirectory(string path)
 {
@@ -202,92 +206,187 @@ int createDirectory(string path)
 	return 0;
 }
 
-int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
+int DATA_SET::CheckOBSConsist(Satellate* sate, int sys, double t, int index, bool& PSE_flag, bool& PHA_flag)
 {
-	unsigned char TempBuff[MAXRAWLEN];
-	int len;
-	int msgID, msgTYPE;
-	GPSTIME* gpstime;
-	int key = 0;
-	int i, j;
-	int val;
-	i = 0;
-	val = 0;
-	while (1)
+	int prn = sate->PRN;
+	int Index = decode_SYN(sys, sate->SYG_TYPE[index]);
+	double f = CODE2FREQ(Index);
+	double lamda = 1e-6 * velocity_c / f;
+	double C_D = 0;
+	double mean_D = 0;
+	double C_P = 0;
+	double C_L = 0;
+	if (sate->DOPPLER[0] == 0)
 	{
-		/*文件预处理*/
-		for (; i < d - 2; i++) // 同步
-		{
-			if (Buff[i] == OEM4SYNC1 && Buff[i + 1] == OEM4SYNC2 && Buff[i + 2] == OEM4SYNC3)
-			{
-				break;
-			}
-		}
-		key++;
-		if (i + OEM4HLEN >= d) // 消息不完整，跳出
-			break;
-
-		for (j = 0; j < OEM4HLEN; j++)
-			TempBuff[j] = Buff[i + j]; // 拷贝消息头到待解码缓存中
-
-		len = U2(TempBuff + 8) + OEM4HLEN; // 消息头+消息体长度
-		// if (OEM4HLEN != U1(TempBuff + 3))
-		//{
-		//	i += len + 4;
-		//	continue;
-		// }
-
-		if ((len + 4 + i) > d || len > MAXRAWLEN) // 消息不完整，跳出
-			break;
-
-		for (j = OEM4HLEN; j < len + 4; j++) // 拷贝消息体到待解码缓存中
-			TempBuff[j] = Buff[i + j];
-
-		msgID = U2(TempBuff + 4);
-
-		if (CRC32(TempBuff, len) != UCRC32(TempBuff + len, 4)) // 检验CRC32
-		{
-			i += len + 4;
-			continue;
-		}
-
-		/*录入文件头信息*/
-		msgTYPE = (U1(TempBuff + 6) >> 4) & 0X3;
-		gpstime = new GPSTIME(U2(TempBuff + 14), (double)(U4(TempBuff + 16) * 1e-3));
-		if (msgTYPE != 0)
-			continue;
-		int prn = 0;
-		/*处理不同数据信息*/
-		switch (msgID)
-		{
-		case ID_RANGE:
-			result->range->OBS_TIME->Week = gpstime->Week;
-			result->range->OBS_TIME->SecOfWeek = gpstime->SecOfWeek;
-			result->range->Sate_Num = U4(TempBuff + OEM4HLEN);
-			val = decode_RANGE(TempBuff + OEM4HLEN + 4, result->range->Sate_Num, result->range);
-			break;
-		case ID_GPSEPHEMERIS:
-			prn = U4(TempBuff + OEM4HLEN);
-			decode_GPSEPH_STAT(TempBuff + OEM4HLEN, result->GPS_eph[prn - 1]);
-			break;
-		case ID_BDSEPHEMERIS:
-			prn = U4(TempBuff + OEM4HLEN);
-			decode_BDSEPH_STAT(TempBuff + OEM4HLEN, result->BDS_eph[prn - 1]);
-			break;
-		default:
-			break;
-		}
-		delete gpstime;
-		i += len + 4;
-
-		if (val == 1)  //观测数据解码成功
-			break;
+		cout << "DOPPLER DATA LOSS!" << endl;
+		return 0;
 	}
-	//---------------解码后，缓存的处理-------------------//
-	for (j = 0; j < d - i; j++)
-		Buff[j] = Buff[i + j];
+	switch (sys)
+	{
+	case SYS_GPS:
+		Index -= 1;
+		if (GPS_PHA[Index][prn - 1] == 0 && GPS_PSE[Index][prn - 1] == 0 && GPS_DOP[Index][prn - 1] == 0)
+		{
+			GPS_PHA[Index][prn - 1] = sate->PHASE[index];
+			GPS_PSE[Index][prn - 1] = sate->PSERA[index];
+			GPS_DOP[Index][prn - 1] = sate->DOPPLER[index];
+			return 1;
+		}
+		C_D = lamda * abs(GPS_DOP[Index][prn - 1] - sate->DOPPLER[index]);
+		if (C_D > 20)
+			return -1;
+		mean_D = (GPS_DOP[Index][prn - 1] + sate->DOPPLER[index]) / 2;
+		C_P = abs((sate->PSERA[index] - GPS_PSE[Index][prn - 1]) + lamda * mean_D * t);
+		C_L = abs(lamda * (sate->PHASE[index] - GPS_PHA[Index][prn - 1]) + lamda * mean_D * t);
+		if (C_P > 8)
+			PSE_flag = false;
+		if (C_L > 0.5)
+			PHA_flag = false;
+		GPS_PSE[Index][prn - 1] = sate->PSERA[index];
+		GPS_PHA[Index][prn - 1] = sate->PHASE[index];
+		GPS_DOP[Index][prn - 1] = sate->DOPPLER[index];
 
-	d = j; // 解码后，缓存中剩余的尚未解码的字节数
-	//---------------解码后，缓存的处理-------------------//
-	return val;
+		return 1;
+	case SYS_BDS:
+		Index -= 7;
+		if (BDS_PHA[Index][prn - 1] == 0 && BDS_PSE[Index][prn - 1] == 0 && BDS_DOP[Index][prn - 1] == 0)
+		{
+			BDS_PHA[Index][prn - 1] = sate->PHASE[index];
+			BDS_PSE[Index][prn - 1] = sate->PSERA[index];
+			BDS_DOP[Index][prn - 1] = sate->DOPPLER[index];
+			return 1;
+		}
+		C_D = lamda * abs(BDS_DOP[Index][prn - 1] - sate->DOPPLER[index]);
+		if (C_D > 20)
+			return -1;
+		mean_D = (BDS_DOP[Index][prn - 1] + sate->DOPPLER[index]) / 2;
+		C_P = abs((sate->PSERA[index] - BDS_PSE[Index][prn - 1]) + lamda * mean_D * t);
+		C_L = abs(lamda * (sate->PHASE[index] - BDS_PHA[Index][prn - 1]) + lamda * mean_D * t);
+		if (C_P > 8)
+			PSE_flag = false;
+		if (C_L > 0.5)
+			PHA_flag = false;
+		BDS_PSE[Index][prn - 1] = sate->PSERA[index];
+		BDS_PHA[Index][prn - 1] = sate->PHASE[index];
+		BDS_DOP[Index][prn - 1] = sate->DOPPLER[index];
+
+		return 1;
+	default:
+		return 0;
+		break;
+	}
+}
+
+int DATA_SET::DetectOutlier(Satellate* sate, int sys, double t, int index1, int index2)
+{
+	int prn = sate->PRN;
+	double f1 = CODE2FREQ(decode_SYN(sys, sate->SYG_TYPE[index1]));
+	double f2 = CODE2FREQ(decode_SYN(sys, sate->SYG_TYPE[index2]));
+	double lamda1 = 1e-6 * velocity_c / f1;
+	double lamda2 = 1e-6 * velocity_c / f2;
+	bool PSE_flag1 = true;
+	bool PHA_flag1 = true;
+	bool PSE_flag2 = true;
+	bool PHA_flag2 = true;
+	double GF = 0;
+	double MW = 0;
+	double dGF = 0;
+	double dMW = 0;
+	switch (sys)
+	{
+	case SYS_GPS:
+		if (CheckOBSConsist(sate, sys, t, index1, PSE_flag1, PHA_flag1) && CheckOBSConsist(sate, sys, t, index2, PSE_flag2, PHA_flag2) && PSE_flag1 && PHA_flag1 && PSE_flag2 && PHA_flag2)
+		{
+			GF = sate->PSERA[index1] - sate->PSERA[index2];
+			MW = (f1 - f2) * (sate->PSERA[index1] / lamda1 + sate->PSERA[index2] / lamda2) / (f1 + f2) - (sate->PHASE[index1] - sate->PHASE[index2]);
+			if (GPS_GF[prn - 1] == 0 && GPS_MW[prn - 1] == 0)
+			{
+				GPS_GF[prn - 1] = GF;
+				GPS_MW[prn - 1] = MW;
+				GPS_COUNT[prn - 1]++;
+				return 1;
+			}
+			dGF = abs(GF - GPS_GF[prn - 1]);
+			dMW = abs(MW - GPS_MW[prn - 1]);
+			GPS_GF[prn - 1] = GF;
+			GPS_MW[prn - 1] = (GPS_MW[prn - 1] * (GPS_COUNT[prn - 1]++) + MW);
+			GPS_MW[prn - 1] /= GPS_COUNT[prn - 1];
+			if (dGF > GF_THRESH || dMW > MW_THRESH)
+				return 0;
+
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+	case SYS_BDS:
+		if (CheckOBSConsist(sate, sys, t, index1, PSE_flag1, PHA_flag1) && CheckOBSConsist(sate, sys, t, index2, PSE_flag2, PHA_flag2) && PSE_flag1 && PHA_flag1 && PSE_flag2 && PHA_flag2)
+		{
+			GF = sate->PSERA[index1] - sate->PSERA[index2];
+			MW = (f1 - f2) * (sate->PSERA[index1] / lamda1 + sate->PSERA[index2] / lamda2) / (f1 + f2) - (sate->PHASE[index1] - sate->PHASE[index2]);
+			if (BDS_GF[prn - 1] == 0 && BDS_MW[prn - 1] == 0)
+			{
+				BDS_GF[prn - 1] = GF;
+				BDS_MW[prn - 1] = MW;
+				BDS_COUNT[prn - 1]++;
+				return 1;
+			}
+			dGF = abs(GF - BDS_GF[prn - 1]);
+			dMW = abs(MW - BDS_MW[prn - 1]);
+			BDS_GF[prn - 1] = GF;
+			BDS_MW[prn - 1] = (BDS_MW[prn - 1] * (BDS_COUNT[prn - 1]++) + MW);
+			BDS_MW[prn - 1] /= BDS_COUNT[prn - 1];
+			if (dGF > GF_THRESH || dMW > MW_THRESH)
+				return 0;
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+	default:
+		return 0;
+		break;
+	}
+}
+
+void DATA_SET::DetectOut(Configure cfg, double dt_e)
+{
+	for (int i = 0; i < range->GPS_SATE.size(); i++)
+	{
+		if (range->GPS_SATE[i]->Phase_NUM < 2)					//需修改
+			continue;
+		int prn = range->GPS_SATE[i]->PRN;
+		int Index1 = 0;
+		int Index2 = 0;
+		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index1])) != cfg.GPS_f1 && Index1 < MAXNUM)
+			Index1++;
+		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index2])) != cfg.GPS_f2 && Index2 < MAXNUM)
+			Index2++;
+
+		if (!DetectOutlier(range->GPS_SATE[i], range->GPS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
+		{
+			range->GPS_SATE[i]->Outlier = true;
+			continue;
+		}
+	}
+	for (int i = 0; i < range->BDS_SATE.size(); i++)
+	{
+		if (range->BDS_SATE[i]->Phase_NUM < 2)
+			continue;
+		int prn = range->BDS_SATE[i]->PRN;
+		int Index1 = 0;
+		int Index2 = 0;
+		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index1])) != cfg.BDS_f1 && Index1 < MAXNUM)
+			Index1++;
+		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index2])) != cfg.BDS_f2 && Index2 < MAXNUM)
+			Index2++;
+
+		if (!DetectOutlier(range->BDS_SATE[i], range->BDS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
+		{
+			range->BDS_SATE[i]->Outlier = true;
+			continue;
+		}
+	}
 }

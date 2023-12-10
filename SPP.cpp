@@ -43,6 +43,7 @@ int main()
     SOCKET NetGps;
     Configure CfgInfo;
     int ReadFlag;
+    CfgInfo.Load_cfg();
 
     int choice = 0;
     printf("请选择输入方式\n1. 文件\t2. 网口\n");

@@ -107,7 +107,7 @@ MatrixXd getz(MatrixXd l_P, MatrixXd l_V)
 	return z;
 }
 
-MatrixXd DATA_SET::Initial_KF()
+MatrixXd DATA_SET::Set_KF()
 {
 	MatrixXd B(0, 4), l_Pos(0, 1), l_Vel(0, 1);
 	XYZ sate_pos0;
@@ -256,7 +256,7 @@ unsigned int KF_SPP(DATA_SET* data, double dt_e, bool first_flag)
 	if (KF_1(data, dt_e))
 	{
 		cout << "KF" << endl;
-		data->solve_result = Success;
+		data->solve_result = Success_Solve;
 	}
 	else
 		return 0;
@@ -298,7 +298,7 @@ unsigned int KF_1(DATA_SET* data, double T)
 	//for (int i = 0; i < 4; i++)
 	//{
 		data->KF->predict();
-		MatrixXd z = data->Initial_KF();
+		MatrixXd z = data->Set_KF();
 		if (z(0, 0) == -1)
 			return 0;
 		data->KF->update(z);

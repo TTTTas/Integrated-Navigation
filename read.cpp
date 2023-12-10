@@ -340,3 +340,93 @@ int readfile(const char* filepath, vector<OBS_DATA*>& range, EPOCH* gps, EPOCH* 
 
 	return 1;
 }
+
+int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
+{
+	unsigned char TempBuff[MAXRAWLEN];
+	int len;
+	int msgID, msgTYPE;
+	GPSTIME* gpstime;
+	int key = 0;
+	int i, j;
+	int val;
+	i = 0;
+	val = 0;
+	while (1)
+	{
+		/*文件预处理*/
+		for (; i < d - 2; i++) // 同步
+		{
+			if (Buff[i] == OEM4SYNC1 && Buff[i + 1] == OEM4SYNC2 && Buff[i + 2] == OEM4SYNC3)
+			{
+				break;
+			}
+		}
+		key++;
+		if (i + OEM4HLEN >= d) // 消息不完整，跳出
+			break;
+
+		for (j = 0; j < OEM4HLEN; j++)
+			TempBuff[j] = Buff[i + j]; // 拷贝消息头到待解码缓存中
+
+		len = U2(TempBuff + 8) + OEM4HLEN; // 消息头+消息体长度
+		// if (OEM4HLEN != U1(TempBuff + 3))
+		//{
+		//	i += len + 4;
+		//	continue;
+		// }
+
+		if ((len + 4 + i) > d || len > MAXRAWLEN) // 消息不完整，跳出
+			break;
+
+		for (j = OEM4HLEN; j < len + 4; j++) // 拷贝消息体到待解码缓存中
+			TempBuff[j] = Buff[i + j];
+
+		msgID = U2(TempBuff + 4);
+
+		if (CRC32(TempBuff, len) != UCRC32(TempBuff + len, 4)) // 检验CRC32
+		{
+			i += len + 4;
+			continue;
+		}
+
+		/*录入文件头信息*/
+		msgTYPE = (U1(TempBuff + 6) >> 4) & 0X3;
+		gpstime = new GPSTIME(U2(TempBuff + 14), (double)(U4(TempBuff + 16) * 1e-3));
+		if (msgTYPE != 0)
+			continue;
+		int prn = 0;
+		/*处理不同数据信息*/
+		switch (msgID)
+		{
+		case ID_RANGE:
+			result->range->OBS_TIME->Week = gpstime->Week;
+			result->range->OBS_TIME->SecOfWeek = gpstime->SecOfWeek;
+			result->range->Sate_Num = U4(TempBuff + OEM4HLEN);
+			val = decode_RANGE(TempBuff + OEM4HLEN + 4, result->range->Sate_Num, result->range);
+			break;
+		case ID_GPSEPHEMERIS:
+			prn = U4(TempBuff + OEM4HLEN);
+			decode_GPSEPH_STAT(TempBuff + OEM4HLEN, result->GPS_eph[prn - 1]);
+			break;
+		case ID_BDSEPHEMERIS:
+			prn = U4(TempBuff + OEM4HLEN);
+			decode_BDSEPH_STAT(TempBuff + OEM4HLEN, result->BDS_eph[prn - 1]);
+			break;
+		default:
+			break;
+		}
+		delete gpstime;
+		i += len + 4;
+
+		if (val == 1)  //观测数据解码成功
+			break;
+	}
+	//---------------解码后，缓存的处理-------------------//
+	for (j = 0; j < d - i; j++)
+		Buff[j] = Buff[i + j];
+
+	d = j; // 解码后，缓存中剩余的尚未解码的字节数
+	//---------------解码后，缓存的处理-------------------//
+	return val;
+}

@@ -1,66 +1,6 @@
 #include "cal.h"
 #include "data.h"
 
-/*卫星粗差探测存储变量*/
-double GPS_GF[GPS_SAT_QUAN];
-double GPS_MW[GPS_SAT_QUAN];
-double GPS_PSE[6][GPS_SAT_QUAN];
-double GPS_PHA[6][GPS_SAT_QUAN];
-double GPS_DOP[6][GPS_SAT_QUAN];
-int GPS_COUNT[GPS_SAT_QUAN];
-
-double BDS_GF[BDS_SAT_QUAN];
-double BDS_MW[BDS_SAT_QUAN];
-double BDS_PSE[5][BDS_SAT_QUAN];
-double BDS_PHA[5][BDS_SAT_QUAN];
-double BDS_DOP[5][BDS_SAT_QUAN];
-int BDS_COUNT[BDS_SAT_QUAN];
-
-/*频点数、卫星种数配置*/
-int phase_num; // 单频or双频
-int SYS_num;   // 单星or双星
-int User_SYS;  // 单星下指定系统，默认GPS
-int Hop_used;  // 是否启用对流层改正
-
-unsigned int initial()
-{
-	for (int i = 0; i < GPS_SAT_QUAN; i++)
-	{
-		GPS_GF[i] = 0;
-		GPS_MW[i] = 0;
-	}
-	for (int i = 0; i < BDS_SAT_QUAN; i++)
-	{
-		BDS_GF[i] = 0;
-		BDS_MW[i] = 0;
-	}
-	phase_num = 0;
-	SYS_num = 0;
-	User_SYS = SYS_GPS;
-	printf("请选择单频或双频\n1. 单频\t2. 双频\n");
-	cin >> phase_num;
-	printf("请选择单系统或双系统\n1. 单系统\t2. 双系统\n");
-	cin >> SYS_num;
-	if (SYS_num == 1)
-	{
-		printf("请选择解算系统\n1. GPS\t2. BDS\n");
-		cin >> User_SYS;
-		switch (User_SYS)
-		{
-		case 1:
-			User_SYS = SYS_GPS;
-			break;
-		case 2:
-			User_SYS = SYS_BDS;
-		default:
-			break;
-		}
-	}
-	printf("是否改正对流层\n1. 是\t2. 否\n");
-	cin >> Hop_used;
-	return 1;
-}
-
 double SQR(double x)
 {
 	return x * x;
@@ -496,150 +436,6 @@ double Klobuchar(XYZ RcvPos, double E, double A, double alpha[4], double beta[4]
 	}
 }
 
-int CheckOBSConsist(Satellate *sate, int sys, double t, int index, bool &PSE_flag, bool &PHA_flag)
-{
-	int prn = sate->PRN;
-	int Index = decode_SYN(sys, sate->SYG_TYPE[index]);
-	double f = CODE2FREQ(Index);
-	double lamda = 1e-6 * velocity_c / f;
-	double C_D = 0;
-	double mean_D = 0;
-	double C_P = 0;
-	double C_L = 0;
-	if (sate->DOPPLER[0] == 0)
-	{
-		cout << "DOPPLER DATA LOSS!" << endl;
-		return 0;
-	}
-	switch (sys)
-	{
-	case SYS_GPS:
-		Index -= 1;
-		if (GPS_PHA[Index][prn - 1] == 0 && GPS_PSE[Index][prn - 1] == 0 && GPS_DOP[Index][prn - 1] == 0)
-		{
-			GPS_PHA[Index][prn - 1] = sate->PHASE[index];
-			GPS_PSE[Index][prn - 1] = sate->PSERA[index];
-			GPS_DOP[Index][prn - 1] = sate->DOPPLER[index];
-			return 1;
-		}
-		C_D = lamda * abs(GPS_DOP[Index][prn - 1] - sate->DOPPLER[index]);
-		if (C_D > 20)
-			return -1;
-		mean_D = (GPS_DOP[Index][prn - 1] + sate->DOPPLER[index]) / 2;
-		C_P = abs((sate->PSERA[index] - GPS_PSE[Index][prn - 1]) + lamda * mean_D * t);
-		C_L = abs(lamda * (sate->PHASE[index] - GPS_PHA[Index][prn - 1]) + lamda * mean_D * t);
-		if (C_P > 8)
-			PSE_flag = false;
-		if (C_L > 0.5)
-			PHA_flag = false;
-		GPS_PSE[Index][prn - 1] = sate->PSERA[index];
-		GPS_PHA[Index][prn - 1] = sate->PHASE[index];
-		GPS_DOP[Index][prn - 1] = sate->DOPPLER[index];
-
-		return 1;
-	case SYS_BDS:
-		Index -= 7;
-		if (BDS_PHA[Index][prn - 1] == 0 && BDS_PSE[Index][prn - 1] == 0 && BDS_DOP[Index][prn - 1] == 0)
-		{
-			BDS_PHA[Index][prn - 1] = sate->PHASE[index];
-			BDS_PSE[Index][prn - 1] = sate->PSERA[index];
-			BDS_DOP[Index][prn - 1] = sate->DOPPLER[index];
-			return 1;
-		}
-		C_D = lamda * abs(BDS_DOP[Index][prn - 1] - sate->DOPPLER[index]);
-		if (C_D > 20)
-			return -1;
-		mean_D = (BDS_DOP[Index][prn - 1] + sate->DOPPLER[index]) / 2;
-		C_P = abs((sate->PSERA[index] - BDS_PSE[Index][prn - 1]) + lamda * mean_D * t);
-		C_L = abs(lamda * (sate->PHASE[index] - BDS_PHA[Index][prn - 1]) + lamda * mean_D * t);
-		if (C_P > 8)
-			PSE_flag = false;
-		if (C_L > 0.5)
-			PHA_flag = false;
-		BDS_PSE[Index][prn - 1] = sate->PSERA[index];
-		BDS_PHA[Index][prn - 1] = sate->PHASE[index];
-		BDS_DOP[Index][prn - 1] = sate->DOPPLER[index];
-
-		return 1;
-	default:
-		return 0;
-		break;
-	}
-}
-
-int DetectOutlier(Satellate *sate, int sys, double t, int index1, int index2)
-{
-	int prn = sate->PRN;
-	double f1 = CODE2FREQ(decode_SYN(sys, sate->SYG_TYPE[index1]));
-	double f2 = CODE2FREQ(decode_SYN(sys, sate->SYG_TYPE[index2]));
-	double lamda1 = 1e-6 * velocity_c / f1;
-	double lamda2 = 1e-6 * velocity_c / f2;
-	bool PSE_flag1 = true;
-	bool PHA_flag1 = true;
-	bool PSE_flag2 = true;
-	bool PHA_flag2 = true;
-	double GF = 0;
-	double MW = 0;
-	double dGF = 0;
-	double dMW = 0;
-	switch (sys)
-	{
-	case SYS_GPS:
-		if (CheckOBSConsist(sate, sys, t, index1, PSE_flag1, PHA_flag1) && CheckOBSConsist(sate, sys, t, index2, PSE_flag2, PHA_flag2) && PSE_flag1 && PHA_flag1 && PSE_flag2 && PHA_flag2)
-		{
-			GF = sate->PSERA[index1] - sate->PSERA[index2];
-			MW = (f1 - f2) * (sate->PSERA[index1] / lamda1 + sate->PSERA[index2] / lamda2) / (f1 + f2) - (sate->PHASE[index1] - sate->PHASE[index2]);
-			if (GPS_GF[prn - 1] == 0 && GPS_MW[prn - 1] == 0)
-			{
-				GPS_GF[prn - 1] = GF;
-				GPS_MW[prn - 1] = MW;
-				GPS_COUNT[prn - 1]++;
-				return 1;
-			}
-			dGF = abs(GF - GPS_GF[prn - 1]);
-			dMW = abs(MW - GPS_MW[prn - 1]);
-			GPS_GF[prn - 1] = GF;
-			GPS_MW[prn - 1] = (GPS_MW[prn - 1] * (GPS_COUNT[prn - 1]++) + MW);
-			GPS_MW[prn - 1] /= GPS_COUNT[prn - 1];
-			if (dGF > GF_THRESH || dMW > MW_THRESH)
-				return 0;
-
-			return 1;
-		}
-		else
-		{
-			return 0;
-		}
-	case SYS_BDS:
-		if (CheckOBSConsist(sate, sys, t, index1, PSE_flag1, PHA_flag1) && CheckOBSConsist(sate, sys, t, index2, PSE_flag2, PHA_flag2) && PSE_flag1 && PHA_flag1 && PSE_flag2 && PHA_flag2)
-		{
-			GF = sate->PSERA[index1] - sate->PSERA[index2];
-			MW = (f1 - f2) * (sate->PSERA[index1] / lamda1 + sate->PSERA[index2] / lamda2) / (f1 + f2) - (sate->PHASE[index1] - sate->PHASE[index2]);
-			if (BDS_GF[prn - 1] == 0 && BDS_MW[prn - 1] == 0)
-			{
-				BDS_GF[prn - 1] = GF;
-				BDS_MW[prn - 1] = MW;
-				BDS_COUNT[prn - 1]++;
-				return 1;
-			}
-			dGF = abs(GF - BDS_GF[prn - 1]);
-			dMW = abs(MW - BDS_MW[prn - 1]);
-			BDS_GF[prn - 1] = GF;
-			BDS_MW[prn - 1] = (BDS_MW[prn - 1] * (BDS_COUNT[prn - 1]++) + MW);
-			BDS_MW[prn - 1] /= BDS_COUNT[prn - 1];
-			if (dGF > GF_THRESH || dMW > MW_THRESH)
-				return 0;
-			return 1;
-		}
-		else
-		{
-			return 0;
-		}
-	default:
-		return 0;
-		break;
-	}
-}
 #pragma region vector_EPOCH
 unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, bool first_flag, double f1, double f2, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used)
 {
@@ -1152,62 +948,19 @@ unsigned int Cal_2(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, 
 unsigned int Cal_SPP(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, double dt_e, bool first_flag)
 {
 	data->OBSTIME = obs->OBS_TIME;
-	if (obs->GPS_SATE.size() + obs->BDS_SATE.size() < 5)
-	{
-		cout << "DATA_LOSS!" << endl;
-		return -1;
-	}
-	for (int i = 0; i < obs->GPS_SATE.size(); i++)
-	{
-		if (obs->GPS_SATE[i]->Phase_NUM < 2)
-			continue;
-		int prn = obs->GPS_SATE[i]->PRN;
-		double IF = 0;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(obs->GPS_SATE[i]->SYS, obs->GPS_SATE[i]->SYG_TYPE[Index1])) != L1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(obs->GPS_SATE[i]->SYS, obs->GPS_SATE[i]->SYG_TYPE[Index2])) != L2 && Index2 < MAXNUM)
-			Index2++;
-
-		if (!DetectOutlier(obs->GPS_SATE[i], obs->GPS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
-		{
-			obs->GPS_SATE[i]->Outlier = true;
-			continue;
-		}
-	}
-	for (int i = 0; i < obs->BDS_SATE.size(); i++)
-	{
-		if (obs->BDS_SATE[i]->Phase_NUM < 2)
-			continue;
-		int prn = obs->BDS_SATE[i]->PRN;
-		double IF = 0;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(obs->BDS_SATE[i]->SYS, obs->BDS_SATE[i]->SYG_TYPE[Index1])) != B1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(obs->BDS_SATE[i]->SYS, obs->BDS_SATE[i]->SYG_TYPE[Index2])) != B3 && Index2 < MAXNUM)
-			Index2++;
-
-		if (!DetectOutlier(obs->BDS_SATE[i], obs->BDS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
-		{
-			obs->BDS_SATE[i]->Outlier = true;
-			continue;
-		}
-	}
 	if (SYS_num == 1)
 	{
 		switch (User_SYS)
 		{
 		case SYS_GPS:
 			if (Cal_1(data, obs, gpseph, first_flag))
-				data->solve_result = Success;
+				data->solve_result = Success_Solve;
 			else
 				return 0;
 			break;
 		case SYS_BDS:
 			if (Cal_1(data, obs, bdseph, first_flag))
-				data->solve_result = Success;
+				data->solve_result = Success_Solve;
 			else
 				return 0;
 		default:
@@ -1217,7 +970,7 @@ unsigned int Cal_SPP(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph
 	else if (SYS_num == 2)
 	{
 		if (Cal_2(data, obs, gpseph, bdseph, first_flag))
-			data->solve_result = Success;
+			data->solve_result = Success_Solve;
 		else
 			return 0;
 	}
@@ -1710,47 +1463,10 @@ unsigned int Cal_2(DATA_SET *data, bool first_flag)
 // 位置解算
 unsigned int Cal_SPP(DATA_SET *data, double dt_e, bool first_flag)
 {
-	data->OBSTIME = data->range->OBS_TIME;
 	if (data->range->GPS_SATE.size() + data->range->BDS_SATE.size() < 5)
 	{
 		data->solve_result = OBS_DATA_Loss;
 		return -1;
-	}
-	for (int i = 0; i < data->range->GPS_SATE.size(); i++)
-	{
-		if (data->range->GPS_SATE[i]->Phase_NUM < 2)
-			continue;
-		int prn = data->range->GPS_SATE[i]->PRN;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(data->range->GPS_SATE[i]->SYS, data->range->GPS_SATE[i]->SYG_TYPE[Index1])) != L1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(data->range->GPS_SATE[i]->SYS, data->range->GPS_SATE[i]->SYG_TYPE[Index2])) != L2 && Index2 < MAXNUM)
-			Index2++;
-
-		if (!DetectOutlier(data->range->GPS_SATE[i], data->range->GPS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
-		{
-			data->range->GPS_SATE[i]->Outlier = true;
-			continue;
-		}
-	}
-	for (int i = 0; i < data->range->BDS_SATE.size(); i++)
-	{
-		if (data->range->BDS_SATE[i]->Phase_NUM < 2)
-			continue;
-		int prn = data->range->BDS_SATE[i]->PRN;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(data->range->BDS_SATE[i]->SYS, data->range->BDS_SATE[i]->SYG_TYPE[Index1])) != B1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(data->range->BDS_SATE[i]->SYS, data->range->BDS_SATE[i]->SYG_TYPE[Index2])) != B3 && Index2 < MAXNUM)
-			Index2++;
-
-		if (!DetectOutlier(data->range->BDS_SATE[i], data->range->BDS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
-		{
-			data->range->BDS_SATE[i]->Outlier = true;
-			continue;
-		}
 	}
 	if (SYS_num == 1)
 	{
@@ -1758,13 +1474,13 @@ unsigned int Cal_SPP(DATA_SET *data, double dt_e, bool first_flag)
 		{
 		case SYS_GPS:
 			if (Cal_1(data, first_flag))
-				data->solve_result = Success;
+				data->solve_result = Success_Solve;
 			else
 				return 0;
 			break;
 		case SYS_BDS:
 			if (Cal_1(data, first_flag))
-				data->solve_result = Success;
+				data->solve_result = Success_Solve;
 			else
 				return 0;
 		default:
@@ -1774,10 +1490,15 @@ unsigned int Cal_SPP(DATA_SET *data, double dt_e, bool first_flag)
 	else if (SYS_num == 2)
 	{
 		if (Cal_2(data, first_flag))
-			data->solve_result = Success;
+			data->solve_result = Success_Solve;
 		else
 			return 0;
 	}
 
 	return 1;
+}
+
+unsigned int setup_Pos(DATA_SET* data, Configure cfg)
+{
+
 }
