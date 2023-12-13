@@ -1,6 +1,5 @@
 #pragma once
 #pragma region header
-#include "Common_value.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -10,6 +9,23 @@
 #include "transform.h"
 
 using namespace std;
+
+#define MAXRAWLEN 40960		 // 最大读取数据长度
+#define MAXNUM 8			 // 波段数
+#define POLYCRC32 0xEDB88320 // CRC32校验码参数
+#define OEM4SYNC1 0xAA		 /* oem7/6/4 message start sync code 1 */
+#define OEM4SYNC2 0x44		 /* oem7/6/4 message start sync code 2 */
+#define OEM4SYNC3 0x12		 /* oem7/6/4 message start sync code 3 */
+#define OEM4HLEN 28			 /* oem7/6/4 message header length (bytes) */
+
+/* message IDs */
+#define ID_RANGE 43			 /* oem7/6/4 range measurement */
+#define ID_GPSEPHEMERIS 7	 /* oem7/6 decoded gps ephemeris */
+#define ID_BDSEPHEMERIS 1696 /* oem7/6 decoded bds ephemeris */
+
+/*system IDs*/
+#define SYS_GPS 0
+#define SYS_BDS 4
 
 #pragma endregion
 

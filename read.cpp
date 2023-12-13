@@ -393,6 +393,8 @@ int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
 		/*录入文件头信息*/
 		msgTYPE = (U1(TempBuff + 6) >> 4) & 0X3;
 		gpstime = new GPSTIME(U2(TempBuff + 14), (double)(U4(TempBuff + 16) * 1e-3));
+		result->OBSTIME->Week = gpstime->Week;
+		result->OBSTIME->SecOfWeek = gpstime->SecOfWeek;
 		if (msgTYPE != 0)
 			continue;
 		int prn = 0;

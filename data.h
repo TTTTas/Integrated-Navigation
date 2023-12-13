@@ -1,6 +1,5 @@
 #pragma once
 #include <Eigen/Dense>
-#include "Common_value.h"
 #include "transform.h"
 #include "KF.h"
 #include "LS.h"
@@ -13,6 +12,13 @@ using namespace std;
 
 #define GPS_SAT_QUAN 32
 #define BDS_SAT_QUAN 63
+
+/*解算结果*/
+#define UN_Solve 0
+#define Success_Solve 1
+#define Epoch_Loss -1
+#define OBS_DATA_Loss -2
+#define Set_UP_B_fail -3
 
 /*解算结果存储类*/
 class DATA_SET
@@ -55,13 +61,19 @@ public:
 	EPHEMERIS *GPS_eph[GPS_SAT_QUAN];
 	EPHEMERIS *BDS_eph[BDS_SAT_QUAN];
 
+	/*求解过程参量*/
+	bool LS_first;
+	bool KF_first;
+	MatrixXd temp_ref;
+
 	/*Least_Square*/
-	Least_Squares *LS;
+	Least_Squares* LS_Pos;
+	Least_Squares* LS_Vel;
 
 	/*KalmanFilter*/
 	KalmanFilter *KF;
 
-	DATA_SET();
+	DATA_SET(Configure cfg);
 
 	void reset();
 
@@ -70,7 +82,7 @@ public:
 	void KF_Print(FILE *fpr);
 
 	MatrixXd Set_KF();
-	int Set_LS();
+	int Set_LS(Configure cfg);
 
 	/*一致性检验*/
 	int CheckOBSConsist(Satellate* sate, int sys, double t, int index, bool& PSE_flag, bool& PHA_flag);
@@ -83,8 +95,3 @@ public:
 
 /*创建文件夹*/
 int createDirectory(string path);
-
-// SPP单点定位KF
-unsigned int KF_SPP(DATA_SET *data, double dt_e, bool first_flag);
-
-unsigned int KF_1(DATA_SET *data, double T);

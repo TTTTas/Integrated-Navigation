@@ -1,9 +1,19 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <vector>
-#include "Common_value.h"
 using namespace std;
 using namespace Eigen;
+
+/*大地常数*/
+#define WGS84_GM 3.986005E+14
+#define CGCS2000_GM 3.986004418E+14
+#define omiga_earth 7.2921151467E-05
+/*光速*/
+#define velocity_c 2.99792458E8
+
+/*system IDs*/
+#define SYS_GPS 0
+#define SYS_BDS 4
 
 #pragma region 时间域
 /*世界时*/

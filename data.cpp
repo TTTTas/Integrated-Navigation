@@ -3,7 +3,7 @@
 #include <io.h>
 #include <direct.h>
 
-DATA_SET::DATA_SET()
+DATA_SET::DATA_SET(Configure cfg)
 {
 	OBSTIME = new GPSTIME();
 	Pos = new MatrixXd();
@@ -43,9 +43,13 @@ DATA_SET::DATA_SET()
 	}
 
 	solve_result = UN_Solve;
-	
-	LS = new Least_Squares();
 
+	LS_first = true;
+	KF_first = true;
+	temp_ref = MatrixXd::Zero(4, 1);
+	
+	LS_Pos = new Least_Squares(cfg);
+	LS_Vel = new Least_Squares();
 	MatrixXd P_ = MatrixXd::Zero(8, 8);
 	P_.block(0, 0, 4, 4) = MatrixXd::Identity(4, 4) * 10 * 10;
 	P_.block(4, 4, 4, 4) = MatrixXd::Identity(4, 4) * 0.1 * 0.1;
@@ -77,7 +81,17 @@ void DATA_SET::reset()
 
 int DATA_SET::LS_print()
 {
-	XYZ xyz = get_XYZ(( * Pos).block(0, 0, 3, 1));
+	//XYZ xyz = get_XYZ(( * Pos).block(0, 0, 3, 1));
+	//BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
+	//XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
+	//MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
+	//MatrixXd Q_local;
+	//double m_H, m_V, B, L;
+	//Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
+	//m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
+	//m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
+
+	XYZ xyz = get_XYZ(LS_Pos->X.block(0, 0, 3, 1));
 	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
 	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
 	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
@@ -86,18 +100,22 @@ int DATA_SET::LS_print()
 	Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
 	m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
 	m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
+	//BDS Clk : % 7.4f\t
 	switch (solve_result)
 	{
+	case UN_Solve:
+		printf("GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		return 0;
 	case Success_Solve:
-		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tBDS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
+		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\tGPS Clk: %7.4f\tm_H: %7.4f\tm_V: %7.4f\tVelocity: %8.4f\t%8.4f\t%8.4f\t%8.4f\tthegma_P: %6.4f\tthegma_V: %6.4f\tPDOP: %6.4f\tGPS: %2d\tBDS: %2d\t%s\n",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X,xyz.Y,xyz.Z,
 			blh.Lat, blh.Lon, blh.Height,
 			enu.X, enu.Y, enu.Z,
-			(*Pos)(3, 0), (*Pos)(4, 0),
+			LS_Pos->X(3, 0),
 			m_H, m_V,
-			(*Vel)(0, 0), (*Vel)(1, 0), (*Vel)(2, 0), (*Vel)(3, 0),
-			*thegma_Pos, *thegma_Vel, *PDOP,
+			LS_Vel->X(0, 0), LS_Vel->X(1, 0), LS_Vel->X(2, 0), LS_Vel->X(3, 0),
+			LS_Pos->sigma, LS_Vel->sigma, Cal_PDOP(LS_Pos->Qxx),
 			GPS_num, BDS_num,
 			SATES->c_str());
 		return 1;
@@ -208,6 +226,7 @@ int createDirectory(string path)
 
 int DATA_SET::CheckOBSConsist(Satellate* sate, int sys, double t, int index, bool& PSE_flag, bool& PHA_flag)
 {
+	//函数可以优化
 	int prn = sate->PRN;
 	int Index = decode_SYN(sys, sate->SYG_TYPE[index]);
 	double f = CODE2FREQ(Index);
@@ -360,9 +379,9 @@ void DATA_SET::DetectOut(Configure cfg, double dt_e)
 		int prn = range->GPS_SATE[i]->PRN;
 		int Index1 = 0;
 		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index1])) != cfg.GPS_f1 && Index1 < MAXNUM)
+		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index1])) != cfg.GPS_Cfg.f1 && Index1 < MAXNUM)
 			Index1++;
-		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index2])) != cfg.GPS_f2 && Index2 < MAXNUM)
+		while (CODE2FREQ(decode_SYN(range->GPS_SATE[i]->SYS, range->GPS_SATE[i]->SYG_TYPE[Index2])) != cfg.GPS_Cfg.f2 && Index2 < MAXNUM)
 			Index2++;
 
 		if (!DetectOutlier(range->GPS_SATE[i], range->GPS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
@@ -378,9 +397,9 @@ void DATA_SET::DetectOut(Configure cfg, double dt_e)
 		int prn = range->BDS_SATE[i]->PRN;
 		int Index1 = 0;
 		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index1])) != cfg.BDS_f1 && Index1 < MAXNUM)
+		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index1])) != cfg.BDS_Cfg.f1 && Index1 < MAXNUM)
 			Index1++;
-		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index2])) != cfg.BDS_f2 && Index2 < MAXNUM)
+		while (CODE2FREQ(decode_SYN(range->BDS_SATE[i]->SYS, range->BDS_SATE[i]->SYG_TYPE[Index2])) != cfg.BDS_Cfg.f2 && Index2 < MAXNUM)
 			Index2++;
 
 		if (!DetectOutlier(range->BDS_SATE[i], range->BDS_SATE[i]->SYS, dt_e, Index1, Index2) || Index1 == MAXNUM || Index2 == MAXNUM)
