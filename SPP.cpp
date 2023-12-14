@@ -136,13 +136,6 @@ int main()
 					if (dt_epoch == 0)
 						break;
 					temp_t = result->OBSTIME->SecOfWeek;
-					//if (Cal_SPP(result, dt_epoch, first))
-					//{
-					//    first = false;
-					//    cout << "LS" << endl;
-					//    if (KF_SPP(result, dt_epoch, KF_first))
-					//        KF_first = false;
-					// }
 					result->DetectOut(CfgInfo, dt_epoch);
 					if (LS_SPV(result, CfgInfo))
 						result->LS_first = false;

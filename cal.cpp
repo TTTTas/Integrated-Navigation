@@ -1714,19 +1714,20 @@ unsigned int KF_SPP(DATA_SET* data, double dt_e)
 {
 	if (data->KF_first)
 	{
+		//LS_SPV(data,cfg);
 		MatrixXd state(8, 1);
 		state.block(0, 0, 3, 1) = data->LS_Pos->X.block(0, 0, 3, 1);
 		state.block(4, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
 		state(3, 0) = data->LS_Pos->X(3, 0);
 		state(7, 0) = data->LS_Vel->X(3, 0);
 		data->KF->setState(state);
-		data->KF_first = false;
 	}
 
 	if (KF_1(data, dt_e))
 	{
 		cout << "KF" << endl;
 		data->solve_result = Success_Solve;
+		data->KF_first = false;
 	}
 	else
 		return 0;
