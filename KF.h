@@ -1,6 +1,7 @@
 #pragma once
 #include <Eigen/Dense>
 #include <iostream>
+#include "Configure.h"
 using namespace std;
 using namespace Eigen;
 
@@ -11,7 +12,7 @@ public:
 
     void predict();
 
-    void update(MatrixXd z);
+    void update();
 
     void set_A(MatrixXd A);
 
@@ -21,7 +22,11 @@ public:
 
     void set_R(MatrixXd R);
 
+    void set_Z(MatrixXd Z);
+
     void setState(MatrixXd state);
+
+    void reset();
 
     MatrixXd getState() const;
 
@@ -40,14 +45,15 @@ private:
     MatrixXd P_minus_;     // 预测估计误差协方差
 
     MatrixXd K_; // 卡尔曼增益
+    MatrixXd delt_z; //观测值
 };
 
-MatrixXd getA(double T);
+MatrixXd getA(double T, Configure cfg);
 
-MatrixXd getH(MatrixXd B_pos, MatrixXd B_Vel);
+MatrixXd getH(MatrixXd B);
 
-MatrixXd getQ(double T);
+MatrixXd getQ(double T, Configure cfg);
 
-MatrixXd getR(double ROW_P,double ROW_V);
+MatrixXd getR(double ROW);
 
 MatrixXd getz(MatrixXd l_P,MatrixXd l_V);

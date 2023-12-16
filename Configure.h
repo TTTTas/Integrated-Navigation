@@ -32,6 +32,7 @@ public:
 	unsigned short NetPort; // 端口
 	const char* ObsDatFile;				 // log文件路径
 	const char* ResDatFile;				 // pos文件路径
+	const char* KFDatFile;
 	/*频点数、系统数配置*/
 	int phase_num; // 单频or双频
 	int SYS_num;   // 单星or双星
@@ -43,6 +44,9 @@ public:
 	/*BDS系统配置*/
 	Sate_Configure BDS_Cfg;
 
+	/*解算模式*/
+	bool LS_used;
+	bool KF_used;
 	Configure();
 	void Load_cfg();
 };

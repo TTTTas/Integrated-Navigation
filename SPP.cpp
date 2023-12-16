@@ -35,6 +35,7 @@ int main()
 	bool KF_first = true;
 	FILE* DATA_Fobs;   // log文件指针
 	FILE* Pos_Fobs;    // pos文件指针
+	FILE* KF_Fobs;
 	/*网口输入数据相关变量*/
 	int lenR, lenD;
 	unsigned char curbuff[MAXRAWLEN];
@@ -42,7 +43,6 @@ int main()
 	unsigned char decBuff[2 * MAXRAWLEN];
 	SOCKET NetGps;
 	int ReadFlag;
-	CfgInfo.Load_cfg();
 
 	int choice = 0;
 	printf("请选择输入方式\n1. 文件\t2. 网口\n");
@@ -57,15 +57,17 @@ int main()
 	createDirectory(logpath);
 	logpath += filetime + string(".log");
 	string pospath = "C:\\Users\\Surface\\Desktop\\data\\Pos\\";
+	string KFpath = "C:\\Users\\Surface\\Desktop\\data\\KF\\";
 	createDirectory(pospath);
+	createDirectory(KFpath);
 	pospath += filetime + string(".pos");
+	KFpath += filetime + string(".kf");
 	CfgInfo.ObsDatFile = logpath.c_str();
 	CfgInfo.ResDatFile = pospath.c_str();
+	CfgInfo.KFDatFile = KFpath.c_str();
 
 	FILE* tempfile;
 	string path = "D:/GitHub/SPP_Design/报告/双频双系统.pos";
-
-	FILE* KF_file;
 
 	switch (choice)
 	{
@@ -82,8 +84,8 @@ int main()
 				dt_epoch = RANGE[i]->OBS_TIME->SecOfWeek - RANGE[i - 1]->OBS_TIME->SecOfWeek;
 			//if (Cal_SPP(result, RANGE[i], GPS_EPH, BDS_EPH, dt_epoch, first))
 			//    first = false;
-			result->LS_print();
-			result->LS_Filewrite(tempfile);
+			result->LS_print(CfgInfo);
+			result->LS_Filewrite(tempfile, CfgInfo);
 		}
 		fclose(tempfile);
 		break;
@@ -103,7 +105,7 @@ int main()
 			printf("The pos file %s was not opened\n", CfgInfo.ResDatFile);
 			exit(0);
 		}
-		if ((KF_file = fopen("KF.pos", "w")) == NULL)
+		if ((KF_Fobs = fopen(CfgInfo.KFDatFile, "w")) == NULL)
 		{
 			printf("The pos file %s was not opened\n", "KF.pos");
 			exit(0);
@@ -137,15 +139,21 @@ int main()
 						break;
 					temp_t = result->OBSTIME->SecOfWeek;
 					result->DetectOut(CfgInfo, dt_epoch);
-					if (LS_SPV(result, CfgInfo))
-						result->LS_first = false;
-					KF_SPP(result, dt_epoch);
-					cout << "LS" << endl;
-					result->LS_print();              // 输出至控制台
-					result->LS_Filewrite(Pos_Fobs); // 输出至文件
-					cout << "KF" << endl;
-					result->KF_Print(KF_file);
-
+					if (CfgInfo.LS_used)
+					{
+						if (LS_SPV(result, CfgInfo))
+							result->LS_first = false;
+						cout << "LS" << endl;
+						result->LS_print(CfgInfo);              // 输出至控制台
+						result->LS_Filewrite(Pos_Fobs, CfgInfo); // 输出至文件
+					}
+					if (CfgInfo.KF_used)
+					{
+						if (KF_SPV(result, dt_epoch, CfgInfo))
+							result->KF_first = false;
+						cout << "KF" << endl;
+						result->KF_Print(KF_Fobs, CfgInfo);
+					}
 					result->reset();
 				}
 			}

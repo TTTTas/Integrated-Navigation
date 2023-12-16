@@ -35,36 +35,6 @@ void Least_Squares::LS()
 	sigma = sqrt(((v.transpose() * P * v) / m)(0, 0));
 }
 
-int DATA_SET::Set_LS(Configure cfg)
-{
-	temp_ref.topRows(3) = LS_Pos->X.block(0, 0, 3, 1);
-	double dt_G = 0;
-	double dt_C = 0;
-	if (cfg.SYS_num == 1)
-	{
-		if (cfg.GPS_Cfg.used)
-			dt_G = LS_Pos->X(3, 0);
-		if (cfg.BDS_Cfg.used)
-			dt_C = LS_Pos->X(3, 0);
-	}
-	else if(cfg.SYS_num == 2)
-	{
-		dt_G = LS_Pos->X(3, 0);
-		dt_C = LS_Pos->X(4, 0);
-	}
-	if (cfg.GPS_Cfg.used)
-	{
-		temp_ref(3, 0) = dt_G;
-		setup_LS(this, cfg, SYS_GPS);
-	}
-	if (cfg.BDS_Cfg.used)
-	{
-		temp_ref(3, 0) = dt_C;
-		setup_LS(this, cfg, SYS_BDS);
-	}
-	return LS_Pos->B.rows();
-}
-
 int Least_Squares::set_B_Pos(MatrixXd B_)
 {
 	if (B.rows() == 0)
@@ -75,7 +45,6 @@ int Least_Squares::set_B_Pos(MatrixXd B_)
 	int Last_Row = B.rows();
 	int Last_Col = B.cols();
 	int temp_Row = B_.rows();
-	int temp_Col = B_.cols();
 	B.conservativeResize(Last_Row + temp_Row, Last_Col + 1);
 	B.block(Last_Row, 0, temp_Row, 3) = B_.leftCols(3);
 	B.block(0, Last_Col, Last_Row, 1) = MatrixXd::Zero(Last_Row, 1);
@@ -91,7 +60,7 @@ int Least_Squares::set_B_Vel(MatrixXd B_)
 		B = B_;
 		return B.rows();
 	}
-	B.conservativeResize(l.rows() + B_.rows(), 1);
+	B.conservativeResize(B.rows() + B_.rows(), 4);
 	B.bottomRows(B_.rows()) = B_;
 	return B.rows();
 }

@@ -24,20 +24,24 @@ using namespace std;
 class DATA_SET
 {
 public:
-	GPSTIME *OBSTIME;	// 观测时间
-	MatrixXd *Pos;		// 位置+钟差
-	MatrixXd *Vel;		// 速度+钟速
-	MatrixXd *Q_Pos;	// Pos的Q矩阵
-	MatrixXd *Q_Vel;	// Vel的Q矩阵
-	double *thegma_Pos; // Pos的单位权中误差
-	double *thegma_Vel; // Vel的单位权中误差
-	double *PDOP;		// 位置的DOP值
-	double *VDOP;		// 速度的DOP值
-	int GPS_num;		// GPS卫星数
-	int BDS_num;		// BDS卫星数
-	string *SATES;		// 使用的卫星集合
-	int solve_result;	// 解算结果
-	XYZ *Real_Pos;		// 参考真值
+	GPSTIME* OBSTIME;	// 观测时间
+	MatrixXd* Pos;		// 位置+钟差
+	MatrixXd* Vel;		// 速度+钟速
+	MatrixXd* Q_Pos;	// Pos的Q矩阵
+	MatrixXd* Q_Vel;	// Vel的Q矩阵
+	double* thegma_Pos; // Pos的单位权中误差
+	double* thegma_Vel; // Vel的单位权中误差
+	double* PDOP;		// 位置的DOP值
+	double* VDOP;		// 速度的DOP值
+	int LS_GPS_num;		// GPS卫星数
+	int LS_BDS_num;		// BDS卫星数
+	int KF_GPS_num;		// GPS卫星数
+	int KF_BDS_num;		// BDS卫星数
+	string* LS_SATES;		// 使用的卫星集合
+	string* KF_SATES;
+	int LS_result;	// 解算结果
+	int KF_result;
+	XYZ* Real_Pos;		// 参考真值
 
 	/*卫星粗差探测存储变量*/
 	double GPS_GF[GPS_SAT_QUAN];
@@ -55,11 +59,11 @@ public:
 	int BDS_COUNT[BDS_SAT_QUAN];
 
 	/*观测值数据*/
-	OBS_DATA *range;
+	OBS_DATA* range;
 
 	/*单历元星历数据存储*/
-	EPHEMERIS *GPS_eph[GPS_SAT_QUAN];
-	EPHEMERIS *BDS_eph[BDS_SAT_QUAN];
+	EPHEMERIS* GPS_eph[GPS_SAT_QUAN];
+	EPHEMERIS* BDS_eph[BDS_SAT_QUAN];
 
 	/*求解过程参量*/
 	bool LS_first;
@@ -71,17 +75,17 @@ public:
 	Least_Squares* LS_Vel;
 
 	/*KalmanFilter*/
-	KalmanFilter *KF;
+	KalmanFilter* KF;
 
 	DATA_SET(Configure cfg);
 
 	void reset();
 
-	int LS_print();				// 控制台输出
-	int LS_Filewrite(FILE *fpr); // 文件输出
-	void KF_Print(FILE *fpr);
+	int LS_print(Configure cfg);				// 控制台输出
+	int LS_Filewrite(FILE* fpr, Configure cfg); // 文件输出
+	void KF_Print(FILE* fpr, Configure cfg);
 
-	MatrixXd Set_KF();
+	int Set_KF(Configure cfg);
 	int Set_LS(Configure cfg);
 
 	/*一致性检验*/

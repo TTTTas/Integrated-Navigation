@@ -1,8 +1,18 @@
 #include"Configure.h"
+#include<iostream>
 
 Configure::Configure()
 {
 	Load_cfg();
+	int count = 0;
+	if (GPS_Cfg.used)
+		count++;
+	if (BDS_Cfg.used)
+		count++;
+	SYS_num = count;
+	std::cout << "系统数: " << SYS_num << "\n"
+		<< "频点数: " << phase_num << "\n"
+		<< std::endl;
 }
 void Configure::Load_cfg()
 {
@@ -10,12 +20,16 @@ void Configure::Load_cfg()
 	NetPort = 5002;
 
 	phase_num = 2;
-	SYS_num = 1;
+	SYS_num = 0;
 	Hop_used = 1;
 
 	GPS_Cfg = Sate_Configure(L1, L2);
 	BDS_Cfg = Sate_Configure(B1, B3);
 	GPS_Cfg.used = true;
+	BDS_Cfg.used = false;
+
+	LS_used = true;
+	KF_used = true;
 }
 
 Sate_Configure::Sate_Configure(double f1_, double f2_)

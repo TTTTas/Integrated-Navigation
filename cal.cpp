@@ -1544,7 +1544,13 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 			continue;
 		// ¼ÆËãÎÀÐÇÎ»ÖÃ¡¢ÖÓ²î
 		double ts = data->OBSTIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		double dt = abs(ts - eph[prn - 1]->toe_tow + (data->OBSTIME->Week - eph[prn - 1]->toe_wn) * 604800);
+		int week = data->OBSTIME->Week;
+		if (sys == SYS_BDS)
+		{
+			ts -= 14;
+			week -= 1356;
+		}
+		double dt = abs(ts - eph[prn - 1]->toe_tow + (week - eph[prn - 1]->toe_wn) * 604800);
 		if (dt > 14400)
 			continue;
 
@@ -1596,10 +1602,10 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		switch (sys)
 		{
 		case SYS_GPS:
-			*(data->SATES) += "G" + to_string(Sates[i]->PRN);
+			*(data->LS_SATES) += "G" + to_string(Sates[i]->PRN);
 			break;
 		case SYS_BDS:
-			*(data->SATES) += "C" + to_string(Sates[i]->PRN);
+			*(data->LS_SATES) += "C" + to_string(Sates[i]->PRN);
 			break;
 		default:
 			break;
@@ -1620,10 +1626,145 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 	switch (sys)
 	{
 	case SYS_GPS:
-		data->GPS_num = ROWS;
+		data->LS_GPS_num = ROWS;
 		break;
 	case SYS_BDS:
-		data->BDS_num = ROWS;
+		data->LS_BDS_num = ROWS;
+		break;
+	default:
+		break;
+	}
+	return ROWS;
+}
+
+unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
+{
+	int ROWS = 0;
+	vector<Satellate*> Sates;
+	EPHEMERIS** eph;
+	double f = 0;
+	switch (sys)
+	{
+	case SYS_GPS:
+		Sates = data->range->GPS_SATE;
+		eph = data->GPS_eph;
+		f = cfg.GPS_Cfg.f1;
+		break;
+	case SYS_BDS:
+		Sates = data->range->BDS_SATE;
+		eph = data->BDS_eph;
+		f = cfg.BDS_Cfg.f1;
+		break;
+	default:
+		return 0;
+		break;
+	}
+
+	XYZ RcvPos = get_XYZ(data->temp_ref.block(0, 0, 3, 1));
+	double dt_Rcv = data->temp_ref(3, 0);
+	XYZ sate_pos, sate_pos1;
+	double clk = 0;
+	double clk1 = 0;
+	double velocity[4] = { 0, 0, 0, 0 };
+	MatrixXd B, l_Pos;
+	MatrixXd l_Vel;
+	B = MatrixXd::Zero(0, 4);
+	l_Vel = l_Pos = MatrixXd::Zero(0, 1);
+	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
+	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
+	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
+	for (int i = 0; i < Sates.size(); i++)
+	{
+		int prn = Sates[i]->PRN;
+		if (eph[prn - 1]->PRN != prn)
+			continue;
+		int Index = 0;
+		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index])) != f && Index < MAXNUM)
+			Index++;
+		if (Index == MAXNUM)
+			return 0;
+
+		double measure = get_measure(Sates[i], cfg, eph[prn - 1]);
+		if (!measure)
+			continue;
+		// ¼ÆËãÎÀÐÇÎ»ÖÃ¡¢ÖÓ²î
+		double ts = data->OBSTIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
+		int week = data->OBSTIME->Week;
+		if (sys == SYS_BDS)
+		{
+			ts -= 14;
+			week -= 1356;
+		}
+		double dt = abs(ts - eph[prn - 1]->toe_tow + (week - eph[prn - 1]->toe_wn) * 604800);
+		if (dt > 14400)
+			continue;
+
+		double tgd = 0;
+		if (cfg.phase_num == 1)
+			tgd = TGD(eph[prn - 1], f, Sates[i]->SYS);
+
+		for (int j = 0; j < 3; j++)
+		{
+			clk = CORRECT_CLK(ts - clk, eph[prn - 1]);
+			SAT_POS_CAL(ts - clk + tgd, eph[prn - 1], &sate_pos, clk, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
+			clk1 = CORRECT_CLK(ts - clk1 + 1e-3, eph[prn - 1]);
+			SAT_POS_CAL(ts - clk1 + tgd + 1e-3, eph[prn - 1], &sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
+		}
+		if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
+			continue;
+		velocity[0] = (sate_pos1.X - sate_pos.X) / 1e-3;
+		velocity[1] = (sate_pos1.Y - sate_pos.Y) / 1e-3;
+		velocity[2] = (sate_pos1.Z - sate_pos.Z) / 1e-3;
+		velocity[3] = (clk1 - clk) * velocity_c / 1e-3;
+		double lamda = (1e-6 * velocity_c / f);
+		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
+		double w_pos = measure - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
+		double v0 = ((sate_pos.X - RcvPos.X) * velocity[0] + (sate_pos.Y - RcvPos.Y) * velocity[1] + (sate_pos.Z - RcvPos.Z) * velocity[2]) / len;
+		double w_vel = -lamda * Sates[i]->DOPPLER[Index] - (v0 - velocity[3]);
+		if (abs(w_pos) > 10)
+			continue;
+		if (abs(w_vel) > 10)
+			continue;
+		double l = (RcvPos.X - sate_pos.X) / len;
+		double m = (RcvPos.Y - sate_pos.Y) / len;
+		double n = (RcvPos.Z - sate_pos.Z) / len;
+		B_pos_new(0, 0) = l;
+		B_pos_new(0, 1) = m;
+		B_pos_new(0, 2) = n;
+		B_pos_new(0, 3) = 1;
+		l_pos_new(0, 0) = w_pos;
+		l_vel_new(0, 0) = w_vel;
+		B.conservativeResize(B.rows() + 1, B.cols());
+		B.bottomRows(1) = B_pos_new;
+		l_Pos.conservativeResize(l_Pos.rows() + 1, l_Pos.cols());
+		l_Pos.bottomRows(1) = l_pos_new;
+		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
+		l_Vel.bottomRows(1) = l_vel_new;
+		switch (sys)
+		{
+		case SYS_GPS:
+			*(data->KF_SATES) += "G" + to_string(Sates[i]->PRN);
+			break;
+		case SYS_BDS:
+			*(data->KF_SATES) += "C" + to_string(Sates[i]->PRN);
+			break;
+		default:
+			break;
+		}
+		ROWS++;
+	}
+	if (ROWS == 0)
+		return -0;
+	data->KF->set_H(getH(B));
+	data->KF->set_R(getR(ROWS));
+	data->KF->set_Z(getz(l_Pos, l_Vel));
+	switch (sys)
+	{
+	case SYS_GPS:
+		data->KF_GPS_num = ROWS;
+		break;
+	case SYS_BDS:
+		data->KF_BDS_num = ROWS;
 		break;
 	default:
 		break;
@@ -1687,65 +1828,116 @@ unsigned int LS_SPV(DATA_SET* data, Configure cfg)
 	int val = 0;
 	for (int i = 0; i < 4; i++)
 	{
-		*data->SATES = "";
+		*data->LS_SATES = "";
 		data->LS_Pos->reset();
 		data->LS_Vel->reset();
 		val = data->Set_LS(cfg);
 		if (val)
 		{
 			data->LS_Pos->ELS();
-			//if (data->LS_Pos->sigma < 2)
-			//{
-			//	data->LS_first = false;
-			//}
-			data->solve_result = Success_Solve;
+			data->LS_Vel->LS();
+			data->LS_result = Success_Solve;
 		}
-	}
-	if (val)
-	{
-		data->LS_Vel->LS();
 	}
 
 	return val;
 }
 
-
-unsigned int KF_SPP(DATA_SET* data, double dt_e)
+int DATA_SET::Set_LS(Configure cfg)
 {
-	if (data->KF_first)
+	temp_ref.topRows(3) = LS_Pos->X.block(0, 0, 3, 1);
+	double dt_G = 0;
+	double dt_C = 0;
+	if (cfg.SYS_num == 1)
 	{
-		//LS_SPV(data,cfg);
+		if (cfg.GPS_Cfg.used)
+			dt_G = LS_Pos->X(3, 0);
+		if (cfg.BDS_Cfg.used)
+			dt_C = LS_Pos->X(3, 0);
+	}
+	else if (cfg.SYS_num == 2)
+	{
+		dt_G = LS_Pos->X(3, 0);
+		dt_C = LS_Pos->X(4, 0);
+	}
+	if (cfg.GPS_Cfg.used)
+	{
+		temp_ref(3, 0) = dt_G;
+		setup_LS(this, cfg, SYS_GPS);
+	}
+	if (cfg.BDS_Cfg.used)
+	{
+		temp_ref(3, 0) = dt_C;
+		setup_LS(this, cfg, SYS_BDS);
+	}
+	return LS_Pos->B.rows();
+}
+
+unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg)
+{
+	int val = 0;
+	if (data->KF_first && data->LS_result == Success_Solve)
+	{
 		MatrixXd state(8, 1);
 		state.block(0, 0, 3, 1) = data->LS_Pos->X.block(0, 0, 3, 1);
-		state.block(4, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
-		state(3, 0) = data->LS_Pos->X(3, 0);
-		state(7, 0) = data->LS_Vel->X(3, 0);
+		if (cfg.SYS_num == 1)
+		{
+			state.block(4, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
+			state(3, 0) = data->LS_Pos->X(3, 0);
+			state(7, 0) = data->LS_Vel->X(3, 0);
+		}
+		else if (cfg.SYS_num == 2)
+		{
+			state.conservativeResize(9, 1);
+			state.block(5, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
+			state(3, 0) = data->LS_Pos->X(3, 0);
+			state(4, 0) = data->LS_Pos->X(4, 0);
+			state(8, 0) = data->LS_Vel->X(3, 0);
+		}
 		data->KF->setState(state);
 	}
 
-	if (KF_1(data, dt_e))
+	*data->KF_SATES = "";
+	data->KF->reset();
+	data->KF->set_A(getA(dt_e, cfg));
+	data->KF->set_Q(getQ(dt_e, cfg));
+	data->KF->predict();
+	val = data->Set_KF(cfg);
+	if (val)
 	{
-		cout << "KF" << endl;
-		data->solve_result = Success_Solve;
-		data->KF_first = false;
+		data->KF->update();
+		data->KF_result = Success_Solve;
 	}
-	else
-		return 0;
-
-	return 1;
+	return val;
 }
 
-unsigned int KF_1(DATA_SET* data, double T)
+int DATA_SET::Set_KF(Configure cfg)
 {
-	data->KF->set_A(getA(T));
-	data->KF->set_Q(getQ(T));
-	//for (int i = 0; i < 4; i++)
-	//{
-	data->KF->predict();
-	MatrixXd z = data->Set_KF();
-	if (z(0, 0) == -1)
-		return 0;
-	data->KF->update(z);
-	//}
-	return 1;
+	int val = 0;
+	temp_ref.topRows(3) = KF->getState_minus().block(0, 0, 3, 1);
+	double dt_G = 0;
+	double dt_C = 0;
+	if (cfg.SYS_num == 1)
+	{
+		if (cfg.GPS_Cfg.used)
+			dt_G = KF->getState_minus()(3, 0);
+		if (cfg.BDS_Cfg.used)
+			dt_C = KF->getState_minus()(3, 0);
+	}
+	else if (cfg.SYS_num == 2)
+	{
+		dt_G = KF->getState_minus()(3, 0);
+		dt_C = KF->getState_minus()(4, 0);
+	}
+	if (cfg.GPS_Cfg.used)
+	{
+		temp_ref(3, 0) = dt_G;
+		val = setup_KF(this, cfg, SYS_GPS);
+	}
+	if (cfg.BDS_Cfg.used)
+	{
+		temp_ref(3, 0) = dt_C;
+		val = setup_KF(this, cfg, SYS_BDS);
+	}
+	return val;
 }

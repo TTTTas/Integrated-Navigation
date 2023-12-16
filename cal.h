@@ -131,9 +131,11 @@ unsigned int LS_SPV(DATA_SET* data, Configure cfg);
 
 unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys);
 
+unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys);
+
 double get_measure(Satellate* sate, Configure cfg, EPHEMERIS* eph);
 
 // SPP单点定位KF
-unsigned int KF_SPP(DATA_SET* data, double dt_e);
+unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg);
 
 unsigned int KF_1(DATA_SET* data, double T);
