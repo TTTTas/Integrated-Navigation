@@ -184,8 +184,6 @@ unsigned int decode_GPSEPH(unsigned char *buff, EPOCH *gpse);
 unsigned int decode_BDSEPH_STAT(unsigned char *buff, EPHEMERIS *bdse);
 /*解码所有BDS卫星星历*/
 unsigned int decode_BDSEPH(unsigned char *buff, EPOCH *bdse);
-/*读取文件数据*/
-int readfile(const char *filepath, vector<OBS_DATA *> &range, EPOCH *gps, EPOCH *bds);
 
-/*网口下解码*/
+/*解码*/
 int decodestream(DATA_SET* result, unsigned char Buff[], int& d);

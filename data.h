@@ -25,14 +25,7 @@ class DATA_SET
 {
 public:
 	GPSTIME* OBSTIME;	// 观测时间
-	MatrixXd* Pos;		// 位置+钟差
-	MatrixXd* Vel;		// 速度+钟速
-	MatrixXd* Q_Pos;	// Pos的Q矩阵
-	MatrixXd* Q_Vel;	// Vel的Q矩阵
-	double* thegma_Pos; // Pos的单位权中误差
-	double* thegma_Vel; // Vel的单位权中误差
-	double* PDOP;		// 位置的DOP值
-	double* VDOP;		// 速度的DOP值
+
 	int LS_GPS_num;		// GPS卫星数
 	int LS_BDS_num;		// BDS卫星数
 	int KF_GPS_num;		// GPS卫星数

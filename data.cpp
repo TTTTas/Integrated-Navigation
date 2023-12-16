@@ -6,24 +6,10 @@
 DATA_SET::DATA_SET(Configure cfg)
 {
 	OBSTIME = new GPSTIME();
-	Pos = new MatrixXd();
-	Vel = new MatrixXd();
-	Q_Pos = new MatrixXd();
-	Q_Vel = new MatrixXd();
-	thegma_Pos = new double;
-	thegma_Vel = new double;
-	PDOP = new double;
-	VDOP = new double;
+	
 	LS_SATES = new string();
 	KF_SATES = new string();
-	*Pos = MatrixXd::Zero(5, 1);
-	*Vel = MatrixXd::Zero(4, 1);
-	*Q_Pos = MatrixXd::Zero(5, 5);
-	*Q_Vel = MatrixXd::Zero(4, 4);
-	*thegma_Pos = 0;
-	*thegma_Vel = 0;
-	*PDOP = 0;
-	*VDOP = 0;
+	
 	LS_GPS_num = 0;
 	LS_BDS_num = 0;
 	KF_GPS_num = 0;
@@ -118,7 +104,7 @@ int DATA_SET::LS_print(Configure cfg)
 	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
 	double m_H, m_V, B, L;
-	Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
+	Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
 	m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
 	m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (LS_result)
@@ -181,7 +167,7 @@ int DATA_SET::LS_Filewrite(FILE* fpr, Configure cfg)
 	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
 	double m_H, m_V, B, L;
-	Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
+	Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
 	m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
 	m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 	switch (LS_result)

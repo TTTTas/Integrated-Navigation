@@ -99,15 +99,6 @@ unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sate
 // 搭建速度解算构造矩阵
 unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
 
-//// 单星解算
-//unsigned int Cal_1(DATA_SET *data, OBS_DATA *obs, EPOCH *eph, bool first_flag);
-//
-//// GPS、BDS双星解算
-//unsigned int Cal_2(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, bool first_flag);
-//
-//// SPP单点定位
-//unsigned int Cal_SPP(DATA_SET *data, OBS_DATA *obs, EPOCH *gpseph, EPOCH *bdseph, double dt_e, bool first_flag);
-
 /*网口下位置解算*/
 // 搭建位置解算构造矩阵(双频)
 unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, bool first_flag, double f1, double f2, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used);
@@ -117,15 +108,6 @@ unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sate
 
 // 搭建速度解算构造矩阵
 unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
-
-//// 单星解算
-//unsigned int Cal_1(DATA_SET *data, bool first_flag);
-//
-//// GPS、BDS双星解算
-//unsigned int Cal_2(DATA_SET *data, bool first_flag);
-//
-//// SPP单点定位
-//unsigned int Cal_SPP(DATA_SET *data, double dt_e, bool first_flag);
 
 unsigned int LS_SPV(DATA_SET* data, Configure cfg);
 
@@ -137,5 +119,3 @@ double get_measure(Satellate* sate, Configure cfg, EPHEMERIS* eph);
 
 // SPP单点定位KF
 unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg);
-
-unsigned int KF_1(DATA_SET* data, double T);
