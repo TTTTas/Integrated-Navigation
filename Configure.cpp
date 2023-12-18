@@ -14,6 +14,7 @@ Configure::Configure()
 		<< "ÆµµãÊý: " << phase_num << "\n"
 		<< std::endl;
 }
+
 void Configure::Load_cfg()
 {
 	NetIP = "8.140.46.126";
@@ -24,12 +25,14 @@ void Configure::Load_cfg()
 	Hop_used = 1;
 
 	GPS_Cfg = Sate_Configure(L1, L2);
-	BDS_Cfg = Sate_Configure(B1, B3);
-	GPS_Cfg.used = true;
-	BDS_Cfg.used = false;
+	BDS_Cfg = Sate_Configure(B3, B1);
+	GPS_Cfg.used = false;
+	BDS_Cfg.used = true;
 
 	LS_used = true;
 	KF_used = true;
+
+	w_thresh = 20;
 }
 
 Sate_Configure::Sate_Configure(double f1_, double f2_)

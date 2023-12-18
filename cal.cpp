@@ -1,18 +1,32 @@
 #include "cal.h"
 #include "data.h"
 
+/* 函数名: SQR
+	输入参数:
+	 - x: 要计算平方的值
+	返回值: 输入值的平方
+*/
 double SQR(double x)
 {
 	return x * x;
 }
 
+// 函数名: Len
+// 输入参数:
+//   - pos: 包含三维坐标(X, Y, Z)的结构体
+// 返回值: 坐标点的长度（模）
 double Len(XYZ* pos)
 {
 	return sqrt(SQR(pos->X) + SQR(pos->Y) + SQR(pos->Z));
 }
 
+// 函数名: degree2rad
+// 输入参数:
+//   - degree: 角度值（度）
+// 返回值: 角度值对应的弧度值
 double degree2rad(double degree)
 {
+	// 将角度限制在[0, 360)范围内
 	while (degree > 360 || degree < 0)
 	{
 		if (degree > 360)
@@ -20,14 +34,22 @@ double degree2rad(double degree)
 		if (degree < 0)
 			degree += 360;
 	}
-	return degree * Pi / 180;
+	return degree * Pi / 180; // 转换为弧度
 }
 
+// 函数名: rad2degree
+// 输入参数:
+//   - rad: 弧度值
+// 返回值: 弧度值对应的角度值（度）
 double rad2degree(double rad)
 {
-	return rad * 180 / Pi;
+	return rad * 180 / Pi; // 转换为角度
 }
 
+// 函数名: Cal_PDOP
+// 输入参数:
+//   - Qxx: 协方差矩阵
+// 返回值: PDOP值
 double Cal_PDOP(MatrixXd Qxx)
 {
 	if (Qxx.rows() < 3 || Qxx.cols() < 3)
@@ -35,21 +57,48 @@ double Cal_PDOP(MatrixXd Qxx)
 	return sqrt(Qxx(0, 0) + Qxx(1, 1) + Qxx(2, 2));
 }
 
+// 函数名: Cal_LEAST_SQR
+// 输入参数:
+//   - B: 设计矩阵
+//   - l: 观测残差
+//   - P: 观测权重矩阵
+//   - Qxx: 输出参数，协方差矩阵
+//   - x: 输出参数，最小二乘解
+//   - thegma: 输出参数，单位权中误差
+//   - DOP: 输出参数，PDOP值
+// 返回值: 操作结果，成功返回1，否则返回0
 unsigned int Cal_LEAST_SQR(MatrixXd B, MatrixXd l, MatrixXd P, MatrixXd* Qxx, MatrixXd& x, double* thegma, double* DOP)
 {
+	// 检查输入矩阵的维度是否合法
 	if (B.rows() != P.rows() || B.rows() != l.rows())
 		return 0;
 	if (B.rows() < B.cols())
 		return 0;
+
+	// 计算协方差矩阵
 	*Qxx = (B.transpose() * P * B).inverse();
+
+	// 计算最小二乘解
 	x = *Qxx * B.transpose() * P * l;
+
+	// 计算观测残差
 	MatrixXd v = B * x - l;
+
+	// 计算单位权中误差
 	int m = B.rows() - B.cols();
 	*thegma = sqrt(((v.transpose() * P * v) / m)(0, 0));
+
+	// 计算PDOP值
 	*DOP = Cal_PDOP(*Qxx);
-	return 1;
+
+	return 1; // 成功
 }
 
+// 函数名: decode_SYN
+// 输入参数:
+//   - sys: 系统编号
+//   - signal: 信号编号
+// 返回值: 解码后的信号编号，未知信号返回UNKOWN
 unsigned int decode_SYN(int sys, int signal)
 {
 	switch (sys)
@@ -102,6 +151,10 @@ unsigned int decode_SYN(int sys, int signal)
 	}
 }
 
+// 函数名: CODE2FREQ
+// 输入参数:
+//   - code: 信号编号
+// 返回值: 对应信号编号的频率值
 double CODE2FREQ(int code)
 {
 	switch (code)
@@ -111,15 +164,13 @@ double CODE2FREQ(int code)
 	case 1:
 		return L1;
 	case 2:
-		return L2;
 	case 3:
 		return L2;
 	case 4:
 		return L5;
 	case 5:
-		return L1;
 	case 6:
-		return L2;
+		return L1;
 	case 7:
 		return B1;
 	case 8:
@@ -136,7 +187,11 @@ double CODE2FREQ(int code)
 	}
 }
 
-// 钟差改正
+// 函数名: CORRECT_CLK
+// 输入参数:
+//   - t: 当前时刻
+//   - eph: 指向EPHEMERIS结构的指针
+// 返回值: 改正后的钟差
 double CORRECT_CLK(double t, EPHEMERIS* eph)
 {
 	double correct_clk = t;
@@ -147,6 +202,13 @@ double CORRECT_CLK(double t, EPHEMERIS* eph)
 	return eph->a_f0 + eph->a_f1 * (correct_clk - eph->toc) + eph->a_f2 * (correct_clk - eph->toc) * (correct_clk - eph->toc);
 }
 
+// 函数名: TGD
+// 输入参数:
+//   - e: 指向EPHEMERIS结构的指针
+//   - f: 频率值
+//   - sys: 卫星系统
+
+// 返回值: TGD值
 double TGD(EPHEMERIS* e, double f, int sys)
 {
 	switch (sys)
@@ -167,9 +229,19 @@ double TGD(EPHEMERIS* e, double f, int sys)
 	}
 }
 
-// 星历位置
+// 函数名: SAT_POS_CAL
+// 输入参数:
+//   - t: 观测时刻
+//   - eph: 卫星星历数据结构指针
+//   - Sat_Pos: 卫星位置结果结构指针
+//   - clk: 卫星钟差
+//   - dt: 传播时间修正值
+//   - SYS: 卫星系统类型 (SYS_GPS 或 SYS_BDS)
+// 返回值: 1 表示计算成功
+
 unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, double dt, int SYS)
 {
+	// 计算平均运动速度
 	double n, delt_t, M, E, E0, V, u_, u, r, i, dt0, F;
 	switch (SYS)
 	{
@@ -188,6 +260,8 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 	}
 
 	double dtr = 0;
+
+	// 修正观测时刻，确保在合理范围内
 	while (abs(delt_t) > 302400)
 	{
 		if (delt_t > 302400)
@@ -200,33 +274,41 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 		}
 	}
 
+	// 计算卫星位置和钟差
 	for (int i = 0; i < 10; i++)
 	{
 		M = eph->M0 + n * delt_t;
 		E = M;
 		E0 = M;
 		int count = 0;
+
+		// 迭代计算偏近点角
 		do
 		{
 			E0 = E;
 			E = M + eph->e * sin(E0);
 			count++;
 		} while (abs(E - E0) > 0.000000000001 && count < 10);
+
 		dtr = F * eph->e * eph->sqrt_A * sin(E);
 		delt_t = dt0 - dtr;
 	}
+
 	clk += dtr;
 	dt += (dtr + clk);
 	V = atan2((sqrt(1 - eph->e * eph->e) * sin(E)), (cos(E) - eph->e));
 	u_ = eph->omiga + V;
 	u = u_ + eph->Cuc * cos(2 * u_) + eph->Cus * sin(2 * u_);
 	r = eph->sqrt_A * eph->sqrt_A * (1 - eph->e * cos(E)) + eph->Crc * cos(2 * u_) + eph->Crs * sin(2 * u_);
-	i = eph->i0 + eph->Cic * cos(2 * u_) + eph->Cis * sin(2 * u_) + eph->dot_i * delt_t;
+	i = eph->i0 + eph->Cic * cos(2 * u_) + eph->Cis * sin(2 * u_);
+
+	// 计算卫星直角坐标系下的位置
 	double x = r * cos(u);
 	double y = r * sin(u);
 	double z = 0;
 	double L;
 	double x0, y0, z0;
+
 	switch (SYS)
 	{
 	case SYS_GPS:
@@ -235,27 +317,27 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 		Sat_Pos->Y = x * sin(L) + y * cos(i) * cos(L) - omiga_earth * dt * (x * cos(L) - y * cos(i) * sin(L));
 		Sat_Pos->Z = y * sin(i);
 		break;
+
 	case SYS_BDS:
-		if (fabs(eph->i0 - 0.0873) < 0.1 && fabs(eph->sqrt_A - 6493) < 1) // 通过轨道倾角和轨道根数判断是否为GEO卫星  i: 5/deg sqrt_A: 6493/sqrt_meter
+		// 判断是否为GEO卫星
+		if (fabs(eph->i0 - 0.0873) < 0.1 && fabs(eph->sqrt_A - 6493) < 1)
 		{
 			L = eph->Omiga0 + eph->dot_Omiga * delt_t - omiga_earth * eph->toe_tow;
 			x0 = x * cos(L) - y * cos(i) * sin(L);
 			y0 = x * sin(L) + y * cos(i) * cos(L);
 			z0 = y * sin(i);
+
+			// 坐标变换
 			MatrixXd P_GK(3, 1);
 			MatrixXd R_Z(3, 3);
 			MatrixXd R_X(3, 3);
 			MatrixXd P(3, 1);
-			P_GK << x0,
-				y0,
-				z0;
-			R_X << 1, 0, 0,
-				0, cos(-5 * Pi / 180), sin(-5 * Pi / 180),
-				0, -sin(-5 * Pi / 180), cos(-5 * Pi / 180);
-			R_Z << cos(omiga_earth * delt_t), sin(omiga_earth * delt_t), 0,
-				-sin(omiga_earth * delt_t), cos(omiga_earth * delt_t), 0,
-				0, 0, 1;
+			P_GK << x0, y0, z0;
+			R_X << 1, 0, 0, 0, cos(-5 * Pi / 180), sin(-5 * Pi / 180), 0, -sin(-5 * Pi / 180), cos(-5 * Pi / 180);
+			R_Z << cos(omiga_earth * delt_t), sin(omiga_earth * delt_t), 0, -sin(omiga_earth * delt_t), cos(omiga_earth * delt_t), 0, 0, 0, 1;
 			P = R_Z * R_X * P_GK;
+
+			// 计算卫星位置
 			Sat_Pos->X = cos(omiga_earth * dt) * P(0, 0) + sin(omiga_earth * dt) * P(1, 0);
 			Sat_Pos->Y = cos(omiga_earth * dt) * P(1, 0) - sin(omiga_earth * dt) * P(0, 0);
 			Sat_Pos->Z = P(2, 0);
@@ -275,69 +357,97 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 	return 1;
 }
 
-// 卫星高度角计算
+// 函数名: Ele_Angle
+// 输入参数:
+//   - SatPos: 卫星直角坐标系下的位置
+//   - RcvPos: 接收机直角坐标系下的位置
+//   - sys: 卫星系统类型 (SYS_GPS 或 SYS_BDS)
+// 返回值: 卫星高度角
+
 double Ele_Angle(XYZ SatPos, XYZ RcvPos, int sys)
 {
+	// 将卫星坐标转换到ENU坐标系
 	XYZ Satenu = XYZ2ENU(RcvPos, SatPos, sys);
 
+	// 计算卫星高度角
 	return asin(Satenu.Z / Len(&Satenu));
 }
 
-// Hopefiled对流层改正(m)
+// 函数名: Hopefield
+// 输入参数:
+//   - E: 卫星高度角
+//   - H: 接收机海拔高度
+// 返回值: Hopefield对流层改正值
+
 double Hopefield(double E, double H)
 {
+	// 计算标准大气压力和温度
 	double Ts = T0 - 0.0065 * (H - H0);
 	double hd = 40136 + 148.72 * (Ts - 273.16);
+
+	// 计算标准大气压和相对湿度
 	double Ps = P0 * pow(1 - 0.000026 * (H - H0), 5.225);
 	double RH = RH0 * exp(-0.0006396 * (H - H0));
+
+	// 计算饱和水汽压力
 	double es = RH * exp(-37.2465 + 0.213166 * Ts - 0.000256908 * Ts * Ts);
+
+	// 计算方位角对应的方向余弦
 	double md = sin(degree2rad(sqrt(E * E + 6.25)));
 	double mw = sin(degree2rad(sqrt(E * E + 2.25)));
+
+	// 计算水汽分压和水汽刻度高
 	double hw = 11000;
 	double ZHD = 155.2 * 1e-7 * Ps * (hd - H) / Ts;
 	double ZWD = 155.2 * 1e-7 * 4810 * es * (hw - H) / (Ts * Ts);
+
+	// 返回Hopefield对流层改正值
 	return ZHD / md + ZWD / mw;
 }
 
+// 函数名: Hopefield
+// 输入参数:
+//   - SatPos: 卫星直角坐标系下的位置
+//   - RcvPos: 接收机直角坐标系下的位置
+//   - sys: 卫星系统类型 (SYS_GPS 或 SYS_BDS)
+// 返回值: Hopefield对流层改正值
+
 double Hopefield(XYZ SatPos, XYZ RcvPos, int sys)
 {
+	// 若卫星坐标为零向量，返回0
 	if (SatPos.X == 0 && SatPos.Y == 0 && SatPos.Z == 0)
 	{
 		return 0;
 	}
+
+	// 计算卫星高度角
 	double E = rad2degree(Ele_Angle(SatPos, RcvPos, sys));
-	BLH Rcvblh;
+
+	// 获取接收机海拔高度
 	double H = 0;
 	switch (sys)
 	{
 	case SYS_GPS:
-		Rcvblh = XYZ2BLH(RcvPos, WGS84_e2, WGS84_a);
-		H = Rcvblh.Height;
+		H = XYZ2BLH(RcvPos, WGS84_e2, WGS84_a).Height;
 		break;
 	case SYS_BDS:
-		Rcvblh = XYZ2BLH(RcvPos, CGCS2000_e2, CGCS2000_a);
-		H = Rcvblh.Height;
+		H = XYZ2BLH(RcvPos, CGCS2000_e2, CGCS2000_a).Height;
 		break;
 	default:
 		break;
 	}
+
+	// 判断海拔高度是否在有效范围内，计算Hopefield对流层改正值
 	if (H < 20e3 && H > -100)
 	{
-		double Ts = T0 - 0.0065 * (H - H0);
-		double hd = 40136 + 148.72 * (T0 - 273.16);
-		double Ps = P0 * pow(1 - 0.000026 * (H - H0), 5.225);
-		double RH = RH0 * exp(-0.0006396 * (H - H0));
-		double es = RH * exp(-37.2465 + 0.213166 * Ts - 0.000256908 * Ts * Ts);
-		double md = sin(degree2rad(sqrt(E * E + 6.25)));
-		double mw = sin(degree2rad(sqrt(E * E + 2.25)));
-		double hw = 11000;
-		double ZHD = 155.2 * 1e-7 * Ps * (hd - H) / Ts;
-		double ZWD = 155.2 * 1e-7 * 4810 * es * (hw - H) / (Ts * Ts);
-		return ZHD / md + ZWD / mw;
+		return Hopefield(E, H);
 	}
 	else
+	{
 		return 0;
+	}
 }
+
 
 double Klobuchar(XYZ RcvPos, double E, double A, double alpha[4], double beta[4], double UT, double code, int sys)
 {
@@ -432,522 +542,22 @@ double Klobuchar(XYZ RcvPos, double E, double A, double alpha[4], double beta[4]
 	}
 }
 
-#pragma region vector_EPOCH
-unsigned int setup_Pos(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPOCH* eph, bool first_flag, double f1, double f2, MatrixXd* B_Pos, MatrixXd* l_Pos, MatrixXd* P_Pos, string* sate_used)
-{
-	XYZ sate_pos;
-	double clk = 0;
-	XYZ RcvPos = get_XYZ(Pos.block(0, 0, 3, 1));
-	double dt_Rcv = Pos(3, 0);
-	int ROWS = 0;
-	MatrixXd x_Pos = MatrixXd::Zero(4, 1);
-	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1].num == 0)
-			continue;
-		double IF = 0;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index1])) != f1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index2])) != f2 && Index2 < MAXNUM)
-			Index2++;
-		if (Index1 == MAXNUM || Index2 == MAXNUM)
-			continue;
-		if (!(Sates[i]->LOCK_PSE[Index1] && Sates[i]->LOCK_PSE[Index2] && Sates[i]->LOCK_PHA[Index1] && Sates[i]->LOCK_PHA[Index2]))
-			continue;
-
-		// 计算卫星位置、钟差
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		if (Sates[i]->SYS == SYS_BDS)
-			ts -= 14;
-		double dt = abs(ts - eph[prn - 1].epoch[0]->toe_tow);
-		int index = 0;
-		for (int j = 1; j < eph[prn - 1].num; j++)
-		{
-			if (abs(ts - eph[prn - 1].epoch[j]->toe_tow))
-			{
-				dt = abs(ts - eph[prn - 1].epoch[j]->toe_tow);
-				index = j;
-			}
-		}
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk = CORRECT_CLK(ts - clk, eph[prn - 1].epoch[index]);
-			SAT_POS_CAL(ts - clk, eph[prn - 1].epoch[index], &sate_pos, clk, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		if (!first_flag)
-		{
-			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
-				continue;
-		}
-		if (Sates[i]->SYS == SYS_GPS)
-			IF = SQR(f1) * Sates[i]->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sates[i]->PSERA[Index2] / (SQR(f1) - SQR(f2));
-		else if (Sates[i]->SYS == SYS_BDS)
-		{
-			double k_1_3 = SQR(f1 / f2);
-			IF = (Sates[i]->PSERA[Index2] - k_1_3 * Sates[i]->PSERA[Index1]) / (1 - k_1_3) + velocity_c * k_1_3 * eph[prn - 1].epoch[index]->T_GD1 / (1 - k_1_3);
-		}
-
-		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
-		double w_pos = IF - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
-		if (!first_flag)
-		{
-			if (abs(w_pos) > 10)
-				continue;
-		}
-		double l = (RcvPos.X - sate_pos.X) / len;
-		double m = (RcvPos.Y - sate_pos.Y) / len;
-		double n = (RcvPos.Z - sate_pos.Z) / len;
-		B_pos_new(0, 0) = l;
-		B_pos_new(0, 1) = m;
-		B_pos_new(0, 2) = n;
-		B_pos_new(0, 3) = 1;
-		l_pos_new(0, 0) = w_pos;
-		B_Pos->conservativeResize(B_Pos->rows() + 1, B_Pos->cols());
-		B_Pos->bottomRows(1) = B_pos_new;
-		l_Pos->conservativeResize(l_Pos->rows() + 1, l_Pos->cols());
-		l_Pos->bottomRows(1) = l_pos_new;
-		switch (Sates[i]->SYS)
-		{
-		case SYS_GPS:
-			*sate_used += "G" + to_string(Sates[i]->PRN);
-			break;
-		case SYS_BDS:
-			*sate_used += "C" + to_string(Sates[i]->PRN);
-			break;
-		default:
-			break;
-		}
-		ROWS++;
-	}
-	*P_Pos = MatrixXd::Identity(ROWS, ROWS);
-	return ROWS;
-}
-
-unsigned int setup_Pos(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPOCH* eph, bool first_flag, double f, MatrixXd* B_Pos, MatrixXd* l_Pos, MatrixXd* P_Pos, string* sate_used)
-{
-	XYZ sate_pos;
-	double clk = 0;
-	XYZ RcvPos = get_XYZ(Pos.block(0, 0, 3, 1));
-	double dt_Rcv = Pos(3, 0);
-	int ROWS = 0;
-	MatrixXd x_Pos = MatrixXd::Zero(4, 1);
-	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1].num == 0)
-			continue;
-		int Index = 0;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index])) != f && Index < MAXNUM)
-			Index++;
-		if (Index == MAXNUM)
-			continue;
-		if (!(Sates[i]->LOCK_PSE[Index] && Sates[i]->LOCK_PHA[Index]))
-			continue;
-
-		// 计算卫星位置、钟差
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		if (Sates[i]->SYS == SYS_BDS)
-			ts -= 14;
-		double dt = abs(ts - eph[prn - 1].epoch[0]->toe_tow);
-		int index = 0;
-		for (int j = 1; j < eph[prn - 1].num; j++)
-		{
-			if (abs(ts - eph[prn - 1].epoch[j]->toe_tow))
-			{
-				dt = abs(ts - eph[prn - 1].epoch[j]->toe_tow);
-				index = j;
-			}
-		}
-		double tgd = 0;
-		tgd = TGD(eph[prn - 1].epoch[index], f, Sates[i]->SYS);
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk = CORRECT_CLK(ts - clk, eph[prn - 1].epoch[index]);
-			SAT_POS_CAL(ts - clk + tgd, eph[prn - 1].epoch[index], &sate_pos, clk, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		if (!first_flag)
-		{
-			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
-				continue;
-		}
-
-		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
-		double w_pos = Sates[i]->PSERA[Index] - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
-		if (!first_flag)
-		{
-			if (abs(w_pos) > 10)
-				continue;
-		}
-		double l = (RcvPos.X - sate_pos.X) / len;
-		double m = (RcvPos.Y - sate_pos.Y) / len;
-		double n = (RcvPos.Z - sate_pos.Z) / len;
-		B_pos_new(0, 0) = l;
-		B_pos_new(0, 1) = m;
-		B_pos_new(0, 2) = n;
-		B_pos_new(0, 3) = 1;
-		l_pos_new(0, 0) = w_pos;
-		B_Pos->conservativeResize(B_Pos->rows() + 1, B_Pos->cols());
-		B_Pos->bottomRows(1) = B_pos_new;
-		l_Pos->conservativeResize(l_Pos->rows() + 1, l_Pos->cols());
-		l_Pos->bottomRows(1) = l_pos_new;
-		switch (Sates[i]->SYS)
-		{
-		case SYS_GPS:
-			*sate_used += "G" + to_string(Sates[i]->PRN);
-			break;
-		case SYS_BDS:
-			*sate_used += "C" + to_string(Sates[i]->PRN);
-			break;
-		default:
-			break;
-		}
-		ROWS++;
-	}
-	*P_Pos = MatrixXd::Identity(ROWS, ROWS);
-	return ROWS;
-}
-
-unsigned int setup_Vel(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPOCH* eph, MatrixXd* B_Vel, MatrixXd* l_Vel, MatrixXd* P_Vel)
-{
-	XYZ* sate_pos0 = new XYZ();
-	XYZ* sate_pos1 = new XYZ();
-	double clk0 = 0;
-	double clk1 = 0;
-	double velocity[4] = { 0, 0, 0, 0 };
-	XYZ* RcvPos = new XYZ(Pos(0, 0), Pos(1, 0), Pos(2, 0));
-	MatrixXd x_vel = MatrixXd::Zero(4, 1);
-	MatrixXd B_vel_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
-	int ROWS = 0;
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1].num == 0)
-			continue;
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		if (Sates[i]->SYS == SYS_BDS)
-			ts -= 14;
-		double dt = abs(ts - eph[prn - 1].epoch[0]->toe_tow);
-		int index = 0;
-		for (int j = 1; j < eph[prn - 1].num; j++)
-		{
-			if (abs(ts - eph[prn - 1].epoch[j]->toe_tow) < dt)
-			{
-				dt = abs(ts - eph[prn - 1].epoch[j]->toe_tow);
-				index = j;
-			}
-		}
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk0 = CORRECT_CLK(ts - clk0, eph[prn - 1].epoch[index]);
-			clk1 = CORRECT_CLK(ts + 1e-3 - clk1, eph[prn - 1].epoch[index]);
-			SAT_POS_CAL(ts - clk0, eph[prn - 1].epoch[index], sate_pos0, clk0, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-			SAT_POS_CAL(ts + 1e-3 - clk1, eph[prn - 1].epoch[index], sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		velocity[0] = (sate_pos1->X - sate_pos0->X) / 1e-3;
-		velocity[1] = (sate_pos1->Y - sate_pos0->Y) / 1e-3;
-		velocity[2] = (sate_pos1->Z - sate_pos0->Z) / 1e-3;
-		velocity[3] = (clk1 - clk0) * velocity_c / 1e-3;
-		double f1 = CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[0]));
-		double lamda = (1e-6 * velocity_c / f1);
-		double len = sqrt(SQR(RcvPos->X - sate_pos0->X) + SQR(RcvPos->Y - sate_pos0->Y) + SQR(RcvPos->Z - sate_pos0->Z));
-		double l = (RcvPos->X - sate_pos0->X) / len;
-		double m = (RcvPos->Y - sate_pos0->Y) / len;
-		double n = (RcvPos->Z - sate_pos0->Z) / len;
-		double v0 = ((sate_pos0->X - RcvPos->X) * velocity[0] + (sate_pos0->Y - RcvPos->Y) * velocity[1] + (sate_pos0->Z - RcvPos->Z) * velocity[2]) / len;
-		double w_Vel = -lamda * Sates[i]->DOPPLER[0] - (v0 - velocity[3]);
-		if (abs(w_Vel) > 10)
-			continue;
-		B_vel_new(0, 0) = l;
-		B_vel_new(0, 1) = m;
-		B_vel_new(0, 2) = n;
-		B_vel_new(0, 3) = 1;
-		l_vel_new(0, 0) = w_Vel;
-		B_Vel->conservativeResize(B_Vel->rows() + 1, B_Vel->cols());
-		B_Vel->bottomRows(1) = B_vel_new;
-		l_Vel->conservativeResize(l_Vel->rows() + 1, l_Vel->cols());
-		l_Vel->bottomRows(1) = l_vel_new;
-		ROWS++;
-	}
-	*P_Vel = MatrixXd::Identity(ROWS, ROWS);
-	delete sate_pos0;
-	delete sate_pos1;
-	delete RcvPos;
-	return ROWS;
-}
-
-#pragma endregion
-
-unsigned int setup_Pos(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPHEMERIS** eph, bool first_flag, double f1, double f2, MatrixXd* B_Pos, MatrixXd* l_Pos, MatrixXd* P_Pos, string* sate_used)
-{
-	XYZ sate_pos;
-	double clk = 0;
-	XYZ RcvPos = get_XYZ(Pos.block(0, 0, 3, 1));
-	double dt_Rcv = Pos(3, 0);
-	int ROWS = 0;
-	MatrixXd x_Pos = MatrixXd::Zero(4, 1);
-	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1]->PRN != prn)
-			continue;
-		double IF = 0;
-		int Index1 = 0;
-		int Index2 = 0;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index1])) != f1 && Index1 < MAXNUM)
-			Index1++;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index2])) != f2 && Index2 < MAXNUM)
-			Index2++;
-		if (Index1 == MAXNUM || Index2 == MAXNUM)
-			continue;
-		if (!(Sates[i]->LOCK_PSE[Index1] && Sates[i]->LOCK_PSE[Index2] && Sates[i]->LOCK_PHA[Index1] && Sates[i]->LOCK_PHA[Index2]))
-			continue;
-
-		// 计算卫星位置、钟差
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		double dt = abs(ts - eph[prn - 1]->toe_tow + (OBS_TIME->Week - eph[prn - 1]->toe_wn) * 604800);
-		if (dt > 14400)
-			continue;
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk = CORRECT_CLK(ts - clk, eph[prn - 1]);
-			SAT_POS_CAL(ts - clk, eph[prn - 1], &sate_pos, clk, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		if (!first_flag)
-		{
-			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
-				continue;
-		}
-		if (Sates[i]->SYS == SYS_GPS)
-			IF = SQR(f1) * Sates[i]->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sates[i]->PSERA[Index2] / (SQR(f1) - SQR(f2));
-		else if (Sates[i]->SYS == SYS_BDS)
-		{
-			double k_1_3 = SQR(f1 / f2);
-			IF = (Sates[i]->PSERA[Index2] - k_1_3 * Sates[i]->PSERA[Index1]) / (1 - k_1_3) + velocity_c * k_1_3 * eph[prn - 1]->T_GD1 / (1 - k_1_3);
-		}
-
-		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
-		double w_pos = IF - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
-		if (!first_flag)
-		{
-			if (abs(w_pos) > 10)
-				continue;
-		}
-		double l = (RcvPos.X - sate_pos.X) / len;
-		double m = (RcvPos.Y - sate_pos.Y) / len;
-		double n = (RcvPos.Z - sate_pos.Z) / len;
-		B_pos_new(0, 0) = l;
-		B_pos_new(0, 1) = m;
-		B_pos_new(0, 2) = n;
-		B_pos_new(0, 3) = 1;
-		l_pos_new(0, 0) = w_pos;
-		B_Pos->conservativeResize(B_Pos->rows() + 1, B_Pos->cols());
-		B_Pos->bottomRows(1) = B_pos_new;
-		l_Pos->conservativeResize(l_Pos->rows() + 1, l_Pos->cols());
-		l_Pos->bottomRows(1) = l_pos_new;
-		switch (Sates[i]->SYS)
-		{
-		case SYS_GPS:
-			*sate_used += "G" + to_string(Sates[i]->PRN);
-			break;
-		case SYS_BDS:
-			*sate_used += "C" + to_string(Sates[i]->PRN);
-			break;
-		default:
-			break;
-		}
-		ROWS++;
-	}
-	*P_Pos = MatrixXd::Identity(ROWS, ROWS);
-	return ROWS;
-}
-
-unsigned int setup_Pos(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPHEMERIS** eph, bool first_flag, double f, MatrixXd* B_Pos, MatrixXd* l_Pos, MatrixXd* P_Pos, string* sate_used)
-{
-	XYZ sate_pos;
-	double clk = 0;
-	XYZ RcvPos = get_XYZ(Pos.block(0, 0, 3, 1));
-	double dt_Rcv = Pos(3, 0);
-	int ROWS = 0;
-	MatrixXd x_Pos = MatrixXd::Zero(4, 1);
-	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1]->PRN != prn)
-			continue;
-		int Index = 0;
-		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index])) != f && Index < MAXNUM)
-			Index++;
-		if (Index == MAXNUM)
-			continue;
-		if (!(Sates[i]->LOCK_PSE[Index] && Sates[i]->LOCK_PHA[Index]))
-			continue;
-
-		// 计算卫星位置、钟差
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-		double dt = abs(ts - eph[prn - 1]->toe_tow + (OBS_TIME->Week - eph[prn - 1]->toe_wn) * 604800);
-		if (dt > 14400)
-			continue;
-
-		double tgd = 0;
-		tgd = TGD(eph[prn - 1], f, Sates[i]->SYS);
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk = CORRECT_CLK(ts - clk, eph[prn - 1]);
-			SAT_POS_CAL(ts - clk + tgd, eph[prn - 1], &sate_pos, clk, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		if (!first_flag)
-		{
-			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
-				continue;
-		}
-
-		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
-		double w_pos = Sates[i]->PSERA[Index] - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
-		if (!first_flag)
-		{
-			if (abs(w_pos) > 10)
-				continue;
-		}
-		double l = (RcvPos.X - sate_pos.X) / len;
-		double m = (RcvPos.Y - sate_pos.Y) / len;
-		double n = (RcvPos.Z - sate_pos.Z) / len;
-		B_pos_new(0, 0) = l;
-		B_pos_new(0, 1) = m;
-		B_pos_new(0, 2) = n;
-		B_pos_new(0, 3) = 1;
-		l_pos_new(0, 0) = w_pos;
-		B_Pos->conservativeResize(B_Pos->rows() + 1, B_Pos->cols());
-		B_Pos->bottomRows(1) = B_pos_new;
-		l_Pos->conservativeResize(l_Pos->rows() + 1, l_Pos->cols());
-		l_Pos->bottomRows(1) = l_pos_new;
-		switch (Sates[i]->SYS)
-		{
-		case SYS_GPS:
-			*sate_used += "G" + to_string(Sates[i]->PRN);
-			break;
-		case SYS_BDS:
-			*sate_used += "C" + to_string(Sates[i]->PRN);
-			break;
-		default:
-			break;
-		}
-		ROWS++;
-	}
-	*P_Pos = MatrixXd::Identity(ROWS, ROWS);
-	return ROWS;
-}
-
-unsigned int setup_Vel(GPSTIME* OBS_TIME, MatrixXd Pos, vector<Satellate*> Sates, EPHEMERIS** eph, MatrixXd* B_Vel, MatrixXd* l_Vel, MatrixXd* P_Vel)
-{
-	XYZ* sate_pos0 = new XYZ();
-	XYZ* sate_pos1 = new XYZ();
-	double clk0 = 0;
-	double clk1 = 0;
-	double velocity[4] = { 0, 0, 0, 0 };
-	XYZ* RcvPos = new XYZ(Pos(0, 0), Pos(1, 0), Pos(2, 0));
-	MatrixXd x_vel = MatrixXd::Zero(4, 1);
-	MatrixXd B_vel_new = MatrixXd::Zero(1, 4);
-	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
-	int ROWS = 0;
-	for (int i = 0; i < Sates.size(); i++)
-	{
-		if (Sates[i]->Phase_NUM < 2)
-			continue;
-		if (Sates[i]->Outlier)
-			continue;
-		int prn = Sates[i]->PRN;
-		if (eph[prn - 1]->PRN != prn)
-			continue;
-		double ts = OBS_TIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
-
-		double dt = abs(ts - eph[prn - 1]->toe_tow + (OBS_TIME->Week - eph[prn - 1]->toe_wn) * 604800);
-		if (dt > 14400)
-			continue;
-
-		for (int j = 0; j < 3; j++)
-		{
-			clk0 = CORRECT_CLK(ts - clk0, eph[prn - 1]);
-			clk1 = CORRECT_CLK(ts + 1e-3 - clk1, eph[prn - 1]);
-			SAT_POS_CAL(ts - clk0, eph[prn - 1], sate_pos0, clk0, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-			SAT_POS_CAL(ts + 1e-3 - clk1, eph[prn - 1], sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
-		}
-		velocity[0] = (sate_pos1->X - sate_pos0->X) / 1e-3;
-		velocity[1] = (sate_pos1->Y - sate_pos0->Y) / 1e-3;
-		velocity[2] = (sate_pos1->Z - sate_pos0->Z) / 1e-3;
-		velocity[3] = (clk1 - clk0) * velocity_c / 1e-3;
-		double f1 = CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[0]));
-		double lamda = (1e-6 * velocity_c / f1);
-		double len = sqrt(SQR(RcvPos->X - sate_pos0->X) + SQR(RcvPos->Y - sate_pos0->Y) + SQR(RcvPos->Z - sate_pos0->Z));
-		double l = (RcvPos->X - sate_pos0->X) / len;
-		double m = (RcvPos->Y - sate_pos0->Y) / len;
-		double n = (RcvPos->Z - sate_pos0->Z) / len;
-		double v0 = ((sate_pos0->X - RcvPos->X) * velocity[0] + (sate_pos0->Y - RcvPos->Y) * velocity[1] + (sate_pos0->Z - RcvPos->Z) * velocity[2]) / len;
-		double w_Vel = -lamda * Sates[i]->DOPPLER[0] - (v0 - velocity[3]);
-		if (abs(w_Vel) > 10)
-			continue;
-		B_vel_new(0, 0) = l;
-		B_vel_new(0, 1) = m;
-		B_vel_new(0, 2) = n;
-		B_vel_new(0, 3) = 1;
-		l_vel_new(0, 0) = w_Vel;
-		B_Vel->conservativeResize(B_Vel->rows() + 1, B_Vel->cols());
-		B_Vel->bottomRows(1) = B_vel_new;
-		l_Vel->conservativeResize(l_Vel->rows() + 1, l_Vel->cols());
-		l_Vel->bottomRows(1) = l_vel_new;
-		ROWS++;
-	}
-	*P_Vel = MatrixXd::Identity(ROWS, ROWS);
-	delete sate_pos0;
-	delete sate_pos1;
-	delete RcvPos;
-	return ROWS;
-}
-
-
+// 函数名: setup_LS
+// 输入参数:
+//   - data: 数据集结构体指针
+//   - cfg: 配置信息结构体
+//   - sys: 卫星系统类型 (SYS_GPS 或 SYS_BDS)
+// 返回值: LS定位矩阵行数
 
 unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 {
+	// 声明变量
 	int ROWS = 0;
 	vector<Satellate*> Sates;
 	EPHEMERIS** eph;
 	double f = 0;
+
+	// 根据卫星系统类型选择相应的卫星数据和星历数据
 	switch (sys)
 	{
 	case SYS_GPS:
@@ -964,9 +574,16 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		return 0;
 		break;
 	}
-
+	if (Sates.size() < cfg.SYS_num + 3)
+	{
+		data->LS_result = OBS_DATA_Loss;
+		return 0;
+	}
+	// 获取接收机位置和接收机钟差
 	XYZ RcvPos = get_XYZ(data->temp_ref.block(0, 0, 3, 1));
 	double dt_Rcv = data->temp_ref(3, 0);
+
+	// 初始化变量
 	XYZ sate_pos, sate_pos1;
 	double clk = 0;
 	double clk1 = 0;
@@ -978,20 +595,28 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
 	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
 	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
+
+	// 循环遍历卫星
 	for (int i = 0; i < Sates.size(); i++)
 	{
 		int prn = Sates[i]->PRN;
+
+		// 检查星历数据是否匹配
 		if (eph[prn - 1]->PRN != prn)
 			continue;
+
+		// 查找卫星对应的频率索引
 		int Index = 0;
 		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index])) != f && Index < MAXNUM)
 			Index++;
 		if (Index == MAXNUM)
-			return 0;
+			continue;
 
+		// 获取测量值
 		double measure = get_measure(Sates[i], cfg, eph[prn - 1]);
 		if (!measure)
 			continue;
+
 		// 计算卫星位置、钟差
 		double ts = data->OBSTIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
 		int week = data->OBSTIME->Week;
@@ -1008,6 +633,7 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		if (cfg.phase_num == 1)
 			tgd = TGD(eph[prn - 1], f, Sates[i]->SYS);
 
+		// 计算卫星位置和速度
 		for (int j = 0; j < 3; j++)
 		{
 			clk = CORRECT_CLK(ts - clk, eph[prn - 1]);
@@ -1015,25 +641,37 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 			clk1 = CORRECT_CLK(ts - clk1 + 1e-3, eph[prn - 1]);
 			SAT_POS_CAL(ts - clk1 + tgd + 1e-3, eph[prn - 1], &sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
 		}
+
+		// 检查是否为首次定位
 		if (!data->LS_first)
 		{
 			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
 				continue;
 		}
+
+		// 计算卫星速度
 		velocity[0] = (sate_pos1.X - sate_pos.X) / 1e-3;
 		velocity[1] = (sate_pos1.Y - sate_pos.Y) / 1e-3;
 		velocity[2] = (sate_pos1.Z - sate_pos.Z) / 1e-3;
 		velocity[3] = (clk1 - clk) * velocity_c / 1e-3;
+
+		// 计算方位角对应的波长和长度
 		double lamda = (1e-6 * velocity_c / f);
 		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
+
+		// 计算预测值
 		double w_pos = measure - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
 		double v0 = ((sate_pos.X - RcvPos.X) * velocity[0] + (sate_pos.Y - RcvPos.Y) * velocity[1] + (sate_pos.Z - RcvPos.Z) * velocity[2]) / len;
 		double w_vel = -lamda * Sates[i]->DOPPLER[Index] - (v0 - velocity[3]);
+
+		// 检查是否为首次定位
 		if (!data->LS_first)
 		{
-			if (abs(w_pos) > 10)
+			if (abs(w_pos) > cfg.w_thresh)
 				continue;
 		}
+
+		// 构造最小二乘问题的设计矩阵B和观测矩阵l
 		double l = (RcvPos.X - sate_pos.X) / len;
 		double m = (RcvPos.Y - sate_pos.Y) / len;
 		double n = (RcvPos.Z - sate_pos.Z) / len;
@@ -1043,12 +681,16 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		B_pos_new(0, 3) = 1;
 		l_pos_new(0, 0) = w_pos;
 		l_vel_new(0, 0) = w_vel;
+
+		// 更新B、l矩阵
 		B.conservativeResize(B.rows() + 1, B.cols());
 		B.bottomRows(1) = B_pos_new;
 		l_Pos.conservativeResize(l_Pos.rows() + 1, l_Pos.cols());
 		l_Pos.bottomRows(1) = l_pos_new;
 		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
 		l_Vel.bottomRows(1) = l_vel_new;
+
+		// 根据卫星系统类型记录卫星PRN
 		switch (sys)
 		{
 		case SYS_GPS:
@@ -1062,9 +704,13 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		}
 		ROWS++;
 	}
+
+	// 初始化权阵矩阵
 	P_Pos = MatrixXd::Identity(ROWS, ROWS);
 	P_Vel = MatrixXd::Identity(ROWS, ROWS);
-	if (ROWS != 0)
+
+	// 若有卫星数据，则更新LS_Pos和LS_Vel矩阵
+	if (ROWS >= cfg.SYS_num + 3)
 	{
 		data->LS_Pos->set_B_Pos(B);
 		data->LS_Pos->set_l(l_Pos);
@@ -1073,6 +719,13 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		data->LS_Vel->set_l(l_Vel);
 		data->LS_Vel->set_P(P_Vel);
 	}
+	else
+	{
+		data->LS_result = OBS_DATA_Loss;
+		return 0;
+	}
+
+	// 根据卫星系统类型记录卫星数量
 	switch (sys)
 	{
 	case SYS_GPS:
@@ -1084,15 +737,28 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 	default:
 		break;
 	}
+
+	// 返回LS定位矩阵行数
 	return ROWS;
 }
 
+
+// 函数名: setup_KF
+// 输入参数:
+//   - data: 数据集结构体指针
+//   - cfg: 配置信息结构体
+//   - sys: 卫星系统类型 (SYS_GPS 或 SYS_BDS)
+// 返回值: KF定位矩阵行数
+
 unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 {
+	// 声明变量
 	int ROWS = 0;
 	vector<Satellate*> Sates;
 	EPHEMERIS** eph;
 	double f = 0;
+
+	// 根据卫星系统类型选择相应的卫星数据和星历数据
 	switch (sys)
 	{
 	case SYS_GPS:
@@ -1110,33 +776,41 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		break;
 	}
 
+	// 获取接收机位置和接收机钟差
 	XYZ RcvPos = get_XYZ(data->temp_ref.block(0, 0, 3, 1));
 	double dt_Rcv = data->temp_ref(3, 0);
 	XYZ sate_pos, sate_pos1;
 	double clk = 0;
 	double clk1 = 0;
 	double velocity[4] = { 0, 0, 0, 0 };
-	MatrixXd B, l_Pos;
-	MatrixXd l_Vel;
+	MatrixXd B, l_Pos, l_Vel;
 	B = MatrixXd::Zero(0, 4);
 	l_Vel = l_Pos = MatrixXd::Zero(0, 1);
 	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
 	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
 	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
+
+	// 循环遍历卫星
 	for (int i = 0; i < Sates.size(); i++)
 	{
 		int prn = Sates[i]->PRN;
+
+		// 检查星历数据是否匹配
 		if (eph[prn - 1]->PRN != prn)
 			continue;
+
+		// 查找卫星对应的频率索引
 		int Index = 0;
 		while (CODE2FREQ(decode_SYN(Sates[i]->SYS, Sates[i]->SYG_TYPE[Index])) != f && Index < MAXNUM)
 			Index++;
 		if (Index == MAXNUM)
-			return 0;
+			continue;
 
+		// 获取测量值
 		double measure = get_measure(Sates[i], cfg, eph[prn - 1]);
 		if (!measure)
 			continue;
+
 		// 计算卫星位置、钟差
 		double ts = data->OBSTIME->SecOfWeek - Sates[i]->PSERA[0] / velocity_c;
 		int week = data->OBSTIME->Week;
@@ -1153,6 +827,7 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		if (cfg.phase_num == 1)
 			tgd = TGD(eph[prn - 1], f, Sates[i]->SYS);
 
+		// 计算卫星位置和速度
 		for (int j = 0; j < 3; j++)
 		{
 			clk = CORRECT_CLK(ts - clk, eph[prn - 1]);
@@ -1160,21 +835,35 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 			clk1 = CORRECT_CLK(ts - clk1 + 1e-3, eph[prn - 1]);
 			SAT_POS_CAL(ts - clk1 + tgd + 1e-3, eph[prn - 1], &sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
 		}
+
+		// 检查仰角是否小于10度
 		if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
 			continue;
+
+		// 计算卫星速度
 		velocity[0] = (sate_pos1.X - sate_pos.X) / 1e-3;
 		velocity[1] = (sate_pos1.Y - sate_pos.Y) / 1e-3;
 		velocity[2] = (sate_pos1.Z - sate_pos.Z) / 1e-3;
 		velocity[3] = (clk1 - clk) * velocity_c / 1e-3;
+
+		// 计算方位角对应的波长和长度
 		double lamda = (1e-6 * velocity_c / f);
 		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
+
+		// 计算预测值
 		double w_pos = measure - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
 		double v0 = ((sate_pos.X - RcvPos.X) * velocity[0] + (sate_pos.Y - RcvPos.Y) * velocity[1] + (sate_pos.Z - RcvPos.Z) * velocity[2]) / len;
 		double w_vel = -lamda * Sates[i]->DOPPLER[Index] - (v0 - velocity[3]);
-		if (abs(w_pos) > 10)
+
+		// 检查预测值是否大于10
+		if (abs(w_pos) > cfg.w_thresh)
 			continue;
-		if (abs(w_vel) > 10)
+
+		// 检查预测速度是否大于10
+		if (abs(w_vel) > cfg.w_thresh)
 			continue;
+
+		// 构造卡尔曼滤波问题的设计矩阵B和观测矩阵l
 		double l = (RcvPos.X - sate_pos.X) / len;
 		double m = (RcvPos.Y - sate_pos.Y) / len;
 		double n = (RcvPos.Z - sate_pos.Z) / len;
@@ -1184,12 +873,16 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		B_pos_new(0, 3) = 1;
 		l_pos_new(0, 0) = w_pos;
 		l_vel_new(0, 0) = w_vel;
+
+		// 更新B、l矩阵
 		B.conservativeResize(B.rows() + 1, B.cols());
 		B.bottomRows(1) = B_pos_new;
 		l_Pos.conservativeResize(l_Pos.rows() + 1, l_Pos.cols());
 		l_Pos.bottomRows(1) = l_pos_new;
 		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
 		l_Vel.bottomRows(1) = l_vel_new;
+
+		// 根据卫星系统类型记录卫星PRN
 		switch (sys)
 		{
 		case SYS_GPS:
@@ -1203,11 +896,17 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		}
 		ROWS++;
 	}
+
+	// 如果卫星数为0，返回0
 	if (ROWS == 0)
-		return -0;
+		return 0;
+
+	// 更新Kalman Filter对象的H、R、Z矩阵
 	data->KF->set_H(getH(B));
 	data->KF->set_R(getR(ROWS));
 	data->KF->set_Z(getz(l_Pos, l_Vel));
+
+	// 根据卫星系统类型记录卫星数量
 	switch (sys)
 	{
 	case SYS_GPS:
@@ -1219,14 +918,27 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 	default:
 		break;
 	}
+
+	// 返回KF定位矩阵行数
 	return ROWS;
 }
 
+
+// 函数名: get_measure
+// 输入参数:
+//   - Sate: 卫星信息结构体指针
+//   - cfg: 配置信息结构体
+//   - eph: 星历数据结构体指针
+// 返回值: 测量值
+
 double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph)
 {
+	// 声明变量
 	double measure = 0;
 	double f1 = 0;
 	double f2 = 0;
+
+	// 根据卫星系统类型选择相应的频率
 	switch (Sate->SYS)
 	{
 	case SYS_GPS:
@@ -1241,47 +953,82 @@ double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph)
 		break;
 	}
 
+	// 如果卫星标记为异常值，返回测量值为0
 	if (Sate->Outlier)
 		return 0;
+
 	int prn = Sate->PRN;
 	int Index1 = 0;
 	int Index2 = 0;
+
+	// 查找卫星对应的频率索引
 	while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index1])) != f1 && Index1 < MAXNUM)
 		Index1++;
 	while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index2])) != f2 && Index2 < MAXNUM)
 		Index2++;
+
+	// 如果未找到对应频率索引，返回测量值为0
 	if (Index1 == MAXNUM)
 		return 0;
+
+	// 如果指定的频率1没有相应的相位和伪距观测值，返回测量值为0
 	if (!(Sate->LOCK_PSE[Index1] && Sate->LOCK_PHA[Index1]))
 		return 0;
 
-	if (cfg.SYS_num == 1)
-		measure = Sate->PSERA[Index1];
-	if (cfg.SYS_num = 2)
+	// 根据配置的系统数目计算测量值
+	if (cfg.phase_num == 1)
 	{
+		measure = Sate->PSERA[Index1];
+	}
+	else if (cfg.phase_num == 2)
+	{
+		// 如果相位观测值数量小于2，返回测量值为0
 		if (Sate->Phase_NUM < 2)
 			return 0;
+
+		// 如果未找到对应频率索引，返回测量值为0
 		if (Index2 == MAXNUM)
 			return 0;
+
+		// 如果指定的频率2没有相应的相位和伪距观测值，返回测量值为0
 		if (!(Sate->LOCK_PSE[Index2] && Sate->LOCK_PHA[Index2]))
 			return 0;
+
+		// 计算测量值（无电离层组合）
 		measure = SQR(f1) * Sate->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sate->PSERA[Index2] / (SQR(f1) - SQR(f2));
+
+		// 对于BDS系统，加上TGD1对应的钟差改正
 		if (Sate->SYS == SYS_BDS)
-			measure += velocity_c * SQR(f1 / f2) * eph->T_GD1 / (1 - SQR(f1 / f2));
+			measure += velocity_c * SQR(f2 / f1) * eph->T_GD1 / (1 - SQR(f2 / f1));
 	}
 
+	// 返回计算得到的测量值
 	return measure;
 }
 
+
+// 函数名: LS_SPV
+// 输入参数:
+//   - data: 数据集，包含卡尔曼滤波器、最小二乘解等数据
+//   - cfg: 配置信息，包括系统编号和传感器配置
+// 返回值: 操作结果，成功返回0，否则返回非零值
 unsigned int LS_SPV(DATA_SET* data, Configure cfg)
 {
 	int val = 0;
+	
+
+	// 迭代4次
 	for (int i = 0; i < 4; i++)
 	{
+		// 清空卫星信息
 		*data->LS_SATES = "";
+		// 重置最小二乘解和速度
 		data->LS_Pos->reset();
 		data->LS_Vel->reset();
+		// 设置最小二乘
 		val = data->Set_LS(cfg);
+
+		// 如果成功设置最小二乘，则执行最小二乘解算
 		if (val)
 		{
 			data->LS_Pos->ELS();
@@ -1293,11 +1040,20 @@ unsigned int LS_SPV(DATA_SET* data, Configure cfg)
 	return val;
 }
 
+// 函数名: Set_LS
+// 输入参数:
+//   - cfg: 配置信息，包括系统数和传感器配置
+// 返回值: 最小二乘问题的行数
 int DATA_SET::Set_LS(Configure cfg)
 {
+	// 将最小二乘解的前三行赋值给临时参考数据
 	temp_ref.topRows(3) = LS_Pos->X.block(0, 0, 3, 1);
+
+	// 初始化GPS和BDS的接收机钟差
 	double dt_G = 0;
 	double dt_C = 0;
+
+	// 根据系统数量设置接收机钟差
 	if (cfg.SYS_num == 1)
 	{
 		if (cfg.GPS_Cfg.used)
@@ -1310,84 +1066,114 @@ int DATA_SET::Set_LS(Configure cfg)
 		dt_G = LS_Pos->X(3, 0);
 		dt_C = LS_Pos->X(4, 0);
 	}
+
+	// 设置GPS的接收机钟差
 	if (cfg.GPS_Cfg.used)
 	{
 		temp_ref(3, 0) = dt_G;
 		setup_LS(this, cfg, SYS_GPS);
 	}
+
+	// 设置BDS的接收机钟差
 	if (cfg.BDS_Cfg.used)
 	{
 		temp_ref(3, 0) = dt_C;
 		setup_LS(this, cfg, SYS_BDS);
 	}
+
+	// 返回最小二乘的行数
 	return LS_Pos->B.rows();
 }
 
-unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg)
-{
+
+// 函数名: KF_SPV
+// 输入参数:
+//   - data: 数据集，包含卡尔曼滤波器、最小二乘解等数据
+//   - dt_e: 时间步长
+//   - cfg: 配置信息，包括系统编号和传感器配置
+// 返回值: 操作结果，成功返回0，否则返回非零值
+unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg) {
 	int val = 0;
-	if (data->KF_first && data->LS_result == Success_Solve)
-	{
+
+	// 如果是第一次滤波且最小二乘解成功
+	if (data->KF_first && data->LS_result == Success_Solve) {
+		// 从最小二乘解中提取状态向量
 		MatrixXd state(8, 1);
 		state.block(0, 0, 3, 1) = data->LS_Pos->X.block(0, 0, 3, 1);
-		if (cfg.SYS_num == 1)
-		{
+
+		// 根据系统编号配置状态向量
+		if (cfg.SYS_num == 1) {
 			state.block(4, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
 			state(3, 0) = data->LS_Pos->X(3, 0);
 			state(7, 0) = data->LS_Vel->X(3, 0);
 		}
-		else if (cfg.SYS_num == 2)
-		{
+		else if (cfg.SYS_num == 2) {
 			state.conservativeResize(9, 1);
 			state.block(5, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
 			state(3, 0) = data->LS_Pos->X(3, 0);
 			state(4, 0) = data->LS_Pos->X(4, 0);
 			state(8, 0) = data->LS_Vel->X(3, 0);
 		}
+
+		// 设置卡尔曼滤波器状态
 		data->KF->setState(state);
 	}
 
+	// 重置卡尔曼滤波器并进行预测
 	*data->KF_SATES = "";
 	data->KF->reset();
 	data->KF->set_A(getA(dt_e, cfg));
 	data->KF->set_Q(getQ(dt_e, cfg));
 	data->KF->predict();
+
+	// 设置卡尔曼滤波器的状态
 	val = data->Set_KF(cfg);
-	if (val)
-	{
+
+	// 如果设置成功，执行更新步骤
+	if (val) {
 		data->KF->update();
 		data->KF_result = Success_Solve;
 	}
+
 	return val;
 }
 
-int DATA_SET::Set_KF(Configure cfg)
-{
+// 函数名: DATA_SET::Set_KF
+// 输入参数:
+//   - cfg: 配置信息，包括系统编号和传感器配置
+// 返回值: 操作结果，成功返回0，否则返回非零值
+int DATA_SET::Set_KF(Configure cfg) {
 	int val = 0;
 	temp_ref.topRows(3) = KF->getState_minus().block(0, 0, 3, 1);
 	double dt_G = 0;
 	double dt_C = 0;
-	if (cfg.SYS_num == 1)
-	{
+
+	// 根据系统编号配置GPS和BDS的接收机钟差
+	if (cfg.SYS_num == 1) {
 		if (cfg.GPS_Cfg.used)
 			dt_G = KF->getState_minus()(3, 0);
 		if (cfg.BDS_Cfg.used)
 			dt_C = KF->getState_minus()(3, 0);
 	}
-	else if (cfg.SYS_num == 2)
-	{
+	else if (cfg.SYS_num == 2) {
 		dt_G = KF->getState_minus()(3, 0);
 		dt_C = KF->getState_minus()(4, 0);
 	}
-	if (cfg.GPS_Cfg.used)
-	{
+
+	// 设置参考状态向量的前三个元素
+	temp_ref.topRows(3) = KF->getState_minus().block(0, 0, 3, 1);
+
+	// 根据配置信息设置GPS的状态向量
+	if (cfg.GPS_Cfg.used) {
 		temp_ref(3, 0) = dt_G;
 		val = setup_KF(this, cfg, SYS_GPS);
 	}
-	if (cfg.BDS_Cfg.used)
-	{
+
+	// 根据配置信息设置BDS的状态向量
+	if (cfg.BDS_Cfg.used) {
 		temp_ref(3, 0) = dt_C;
 		val = setup_KF(this, cfg, SYS_BDS);
 	}
+
 	return val;
 }

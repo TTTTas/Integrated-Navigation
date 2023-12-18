@@ -74,16 +74,6 @@ void DATA_SET::reset()
 
 int DATA_SET::LS_print(Configure cfg)
 {
-	//XYZ xyz = get_XYZ(( * Pos).block(0, 0, 3, 1));
-	//BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
-	//XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
-	//MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
-	//MatrixXd Q_local;
-	//double m_H, m_V, B, L;
-	//Q_local = R * ((*Q_Pos).block(0, 0, 3, 3)) * R.transpose();
-	//m_H = (*thegma_Pos) * sqrt(Q_local(2, 2));
-	//m_V = (*thegma_Pos) * sqrt(Q_local(0, 0) + Q_local(1, 1));
-
 	XYZ xyz = get_XYZ(LS_Pos->X.block(0, 0, 3, 1));
 	double dt_G = 0;
 	double dt_C = 0;
@@ -103,16 +93,16 @@ int DATA_SET::LS_print(Configure cfg)
 	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
 	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
-	double m_H, m_V, B, L;
-	Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
-	m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
-	m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
+	double m_H, m_V;
 	switch (LS_result)
 	{
 	case UN_Solve:
 		printf("GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Success_Solve:
+		Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
+		m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
+		m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
@@ -122,7 +112,7 @@ int DATA_SET::LS_print(Configure cfg)
 			printf("GPS Clk : % 7.4f\t", dt_G);
 		if (cfg.BDS_Cfg.used)
 			printf("BDS Clk : % 7.4f\t", dt_C);
-		printf("m_H : % 7.4f\tm_V : % 7.4f\tVelocity : % 8.4f\t % 8.4f\t % 8.4f\t % 8.4f\tthegma_P: % 6.4f\tthegma_V : % 6.4f\tPDOP : % 6.4f\tGPS : % 2d\tBDS : % 2d\t % s\n",
+		printf("m_H : % 7.4f\tm_V : % 7.4f\tVelocity : % 8.4f\t % 8.4f\t % 8.4f\t % 8.4f\tsigma_P: % 6.4f\tsigma_V : % 6.4f\tPDOP : % 6.4f\tGPS : % 2d\tBDS : % 2d\t % s\n",
 			m_H, m_V,
 			LS_Vel->X(0, 0), LS_Vel->X(1, 0), LS_Vel->X(2, 0), LS_Vel->X(3, 0),
 			LS_Pos->sigma, LS_Vel->sigma, Cal_PDOP(LS_Pos->Qxx),
@@ -166,16 +156,16 @@ int DATA_SET::LS_Filewrite(FILE* fpr, Configure cfg)
 	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
 	MatrixXd R = get_Rot(degree2rad(blh.Lat), degree2rad(blh.Lon));
 	MatrixXd Q_local;
-	double m_H, m_V, B, L;
-	Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
-	m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
-	m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
+	double m_H, m_V;
 	switch (LS_result)
 	{
 	case UN_Solve:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Success_Solve:
+		Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
+		m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
+		m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
 		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
@@ -185,7 +175,7 @@ int DATA_SET::LS_Filewrite(FILE* fpr, Configure cfg)
 			fprintf(fpr, "GPS Clk : % 7.4f\t", dt_G);
 		if (cfg.BDS_Cfg.used)
 			fprintf(fpr, "BDS Clk : % 7.4f\t", dt_C);
-		fprintf(fpr, "m_H : % 7.4f\tm_V : % 7.4f\tVelocity : % 8.4f\t % 8.4f\t % 8.4f\t % 8.4f\tthegma_P: % 6.4f\tthegma_V : % 6.4f\tPDOP : % 6.4f\tGPS : % 2d\tBDS : % 2d\t % s\n",
+		fprintf(fpr, "m_H : % 7.4f\tm_V : % 7.4f\tVelocity : % 8.4f\t % 8.4f\t % 8.4f\t % 8.4f\tsigma_P: % 6.4f\tsigma_V : % 6.4f\tPDOP : % 6.4f\tGPS : % 2d\tBDS : % 2d\t % s\n",
 			m_H, m_V,
 			LS_Vel->X(0, 0), LS_Vel->X(1, 0), LS_Vel->X(2, 0), LS_Vel->X(3, 0),
 			LS_Pos->sigma, LS_Vel->sigma, Cal_PDOP(LS_Pos->Qxx),
@@ -194,13 +184,13 @@ int DATA_SET::LS_Filewrite(FILE* fpr, Configure cfg)
 		return 1;
 		break;
 	case OBS_DATA_Loss:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Epoch_Loss:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	case Set_UP_B_fail:
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		return 0;
 	default:
 		break;
@@ -237,7 +227,7 @@ void DATA_SET::KF_Print(FILE* fpr, Configure cfg)
 	{
 	case UN_Solve:
 		printf("GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		break;
 	case Success_Solve:
 		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
@@ -270,13 +260,16 @@ void DATA_SET::KF_Print(FILE* fpr, Configure cfg)
 		break;
 	case OBS_DATA_Loss:
 		printf("GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tOBS_DATA_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		break;
 	case Epoch_Loss:
 		printf("GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tEpoch_Loss\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		break;
 	case Set_UP_B_fail:
 		printf("GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		//fprintf(fpr, "GPSTIME: %d\t%.3f\tSet_UP_B_fail\n", OBSTIME->Week, OBSTIME->SecOfWeek);
+		break;
 	default:
 		break;
 	}

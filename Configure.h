@@ -47,6 +47,9 @@ public:
 	/*解算模式*/
 	bool LS_used;
 	bool KF_used;
+
+	/*阈值*/
+	double w_thresh;
 	Configure();
 	void Load_cfg();
 };
