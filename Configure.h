@@ -50,6 +50,7 @@ public:
 
 	/*ãÐÖµ*/
 	double w_thresh;
+	double Ele_Mask;
 	Configure();
 	void Load_cfg();
 };

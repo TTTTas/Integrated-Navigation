@@ -44,8 +44,19 @@ DATA_SET::DATA_SET(Configure cfg)
 
 	int row = 7 + cfg.SYS_num;
 	MatrixXd P_ = MatrixXd::Zero(row, row);
-	P_.block(0, 0, row - 4, row - 4) = MatrixXd::Identity(row - 4, row - 4) * 10 * 10;
-	P_.block(row - 4, row - 4, 4, 4) = MatrixXd::Identity(4, 4) * 0.1 * 0.1;
+	P_.block(0, 0, 3, 3) = MatrixXd::Identity(3, 3) * 0.05;
+	P_.block(3, 3, 3, 3) = MatrixXd::Identity(3, 3) * 0.05;
+	if (cfg.SYS_num == 1)
+	{
+		P_(6, 6) = 0.05;
+		P_(7, 7) = 0.05;
+	}
+	else if (cfg.SYS_num == 2)
+	{
+		P_(6, 6) = 0.05;
+		P_(7, 7) = 0.05;
+		P_(8, 8) = 0.05;
+	}
 	KF = new KalmanFilter(MatrixXd::Zero(7 + cfg.SYS_num, 1), P_);
 	Real_Pos = new XYZ(-2267807.853, 5009320.431, 3221020.875);
 }
@@ -166,7 +177,7 @@ int DATA_SET::LS_Filewrite(FILE* fpr, Configure cfg)
 		Q_local = R * ((LS_Pos->Qxx).block(0, 0, 3, 3)) * R.transpose();
 		m_H = (LS_Pos->sigma) * sqrt(Q_local(2, 2));
 		m_V = (LS_Pos->sigma) * sqrt(Q_local(0, 0) + Q_local(1, 1));
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
+		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %10.6f\t%10.6f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
 			blh.Lat, blh.Lon, blh.Height,
@@ -203,24 +214,22 @@ void DATA_SET::KF_Print(FILE* fpr, Configure cfg)
 	XYZ xyz = get_XYZ(KF->getState().block(0, 0, 3, 1));
 	BLH blh = XYZ2BLH(xyz, WGS84_e2, WGS84_a);
 	XYZ enu = XYZ2ENU(*Real_Pos, xyz, SYS_GPS);
-	double dt_G = KF->getState()(3, 0);
+	double dt_G = 0;
 	double dt_C = 0;
-	XYZ Vel;
+	XYZ Vel = get_XYZ(KF->getState().block(3, 0, 3, 1));
 	double Rcv_t_v = 0;
 	if (cfg.SYS_num == 1)
 	{
 		if (cfg.GPS_Cfg.used)
-			dt_G = KF->getState()(3, 0);
+			dt_G = KF->getState()(6, 0);
 		if (cfg.BDS_Cfg.used)
-			dt_C = KF->getState()(3, 0);
-		Vel = get_XYZ(KF->getState().block(4, 0, 3, 1));
+			dt_C = KF->getState()(6, 0);
 		Rcv_t_v = KF->getState()(7, 0);
 	}
 	else if (cfg.SYS_num == 2)
 	{
-		dt_G = KF->getState()(3, 0);
-		dt_C = KF->getState()(4, 0);
-		Vel = get_XYZ(KF->getState().block(5, 0, 3, 1));
+		dt_G = KF->getState()(6, 0);
+		dt_C = KF->getState()(7, 0);
 		Rcv_t_v = KF->getState()(8, 0);
 	}
 	switch (KF_result)
@@ -230,7 +239,7 @@ void DATA_SET::KF_Print(FILE* fpr, Configure cfg)
 		//fprintf(fpr, "GPSTIME: %d\t%.3f\tUN_Solve\n", OBSTIME->Week, OBSTIME->SecOfWeek);
 		break;
 	case Success_Solve:
-		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
+		printf("GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %10.6f\t%10.6f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
 			blh.Lat, blh.Lon, blh.Height,
@@ -244,7 +253,7 @@ void DATA_SET::KF_Print(FILE* fpr, Configure cfg)
 			KF_GPS_num, KF_BDS_num,
 			KF_SATES->c_str());
 
-		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %8.4f\t%8.4f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
+		fprintf(fpr, "GPSTIME: %d\t%.3f\tXYZ: %.4f\t%.4f\t%.4f\tBLH: %10.6f\t%10.6f\t%7.4f\tENU: %7.4f\t%7.4f\t%7.4f\t",
 			OBSTIME->Week, OBSTIME->SecOfWeek,
 			xyz.X, xyz.Y, xyz.Z,
 			blh.Lat, blh.Lon, blh.Height,

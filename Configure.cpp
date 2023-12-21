@@ -32,7 +32,8 @@ void Configure::Load_cfg()
 	LS_used = true;
 	KF_used = true;
 
-	w_thresh = 20;
+	w_thresh = 10;
+	Ele_Mask = 10;
 }
 
 Sate_Configure::Sate_Configure(double f1_, double f2_)

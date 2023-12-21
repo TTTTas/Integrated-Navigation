@@ -207,7 +207,6 @@ double CORRECT_CLK(double t, EPHEMERIS* eph)
 //   - e: 指向EPHEMERIS结构的指针
 //   - f: 频率值
 //   - sys: 卫星系统
-
 // 返回值: TGD值
 double TGD(EPHEMERIS* e, double f, int sys)
 {
@@ -241,7 +240,6 @@ double TGD(EPHEMERIS* e, double f, int sys)
 
 unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, double dt, int SYS)
 {
-	// 计算平均运动速度
 	double n, delt_t, M, E, E0, V, u_, u, r, i, dt0, F;
 	switch (SYS)
 	{
@@ -260,8 +258,6 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 	}
 
 	double dtr = 0;
-
-	// 修正观测时刻，确保在合理范围内
 	while (abs(delt_t) > 302400)
 	{
 		if (delt_t > 302400)
@@ -274,41 +270,33 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 		}
 	}
 
-	// 计算卫星位置和钟差
 	for (int i = 0; i < 10; i++)
 	{
 		M = eph->M0 + n * delt_t;
 		E = M;
 		E0 = M;
 		int count = 0;
-
-		// 迭代计算偏近点角
 		do
 		{
 			E0 = E;
 			E = M + eph->e * sin(E0);
 			count++;
 		} while (abs(E - E0) > 0.000000000001 && count < 10);
-
 		dtr = F * eph->e * eph->sqrt_A * sin(E);
 		delt_t = dt0 - dtr;
 	}
-
 	clk += dtr;
-	dt += (dtr + clk);
+	dt += clk;
 	V = atan2((sqrt(1 - eph->e * eph->e) * sin(E)), (cos(E) - eph->e));
 	u_ = eph->omiga + V;
 	u = u_ + eph->Cuc * cos(2 * u_) + eph->Cus * sin(2 * u_);
 	r = eph->sqrt_A * eph->sqrt_A * (1 - eph->e * cos(E)) + eph->Crc * cos(2 * u_) + eph->Crs * sin(2 * u_);
-	i = eph->i0 + eph->Cic * cos(2 * u_) + eph->Cis * sin(2 * u_);
-
-	// 计算卫星直角坐标系下的位置
+	i = eph->i0 + eph->Cic * cos(2 * u_) + eph->Cis * sin(2 * u_) + eph->dot_i * delt_t;
 	double x = r * cos(u);
 	double y = r * sin(u);
 	double z = 0;
 	double L;
 	double x0, y0, z0;
-
 	switch (SYS)
 	{
 	case SYS_GPS:
@@ -317,27 +305,27 @@ unsigned int SAT_POS_CAL(double t, EPHEMERIS* eph, XYZ* Sat_Pos, double& clk, do
 		Sat_Pos->Y = x * sin(L) + y * cos(i) * cos(L) - omiga_earth * dt * (x * cos(L) - y * cos(i) * sin(L));
 		Sat_Pos->Z = y * sin(i);
 		break;
-
 	case SYS_BDS:
-		// 判断是否为GEO卫星
-		if (fabs(eph->i0 - 0.0873) < 0.1 && fabs(eph->sqrt_A - 6493) < 1)
+		if (fabs(eph->i0 - 0.0873) < 0.1 && fabs(eph->sqrt_A - 6493) < 1) // 通过轨道倾角和轨道根数判断是否为GEO卫星  i: 5/deg sqrt_A: 6493/sqrt_meter
 		{
 			L = eph->Omiga0 + eph->dot_Omiga * delt_t - omiga_earth * eph->toe_tow;
 			x0 = x * cos(L) - y * cos(i) * sin(L);
 			y0 = x * sin(L) + y * cos(i) * cos(L);
 			z0 = y * sin(i);
-
-			// 坐标变换
 			MatrixXd P_GK(3, 1);
 			MatrixXd R_Z(3, 3);
 			MatrixXd R_X(3, 3);
 			MatrixXd P(3, 1);
-			P_GK << x0, y0, z0;
-			R_X << 1, 0, 0, 0, cos(-5 * Pi / 180), sin(-5 * Pi / 180), 0, -sin(-5 * Pi / 180), cos(-5 * Pi / 180);
-			R_Z << cos(omiga_earth * delt_t), sin(omiga_earth * delt_t), 0, -sin(omiga_earth * delt_t), cos(omiga_earth * delt_t), 0, 0, 0, 1;
+			P_GK << x0,
+				y0,
+				z0;
+			R_X << 1, 0, 0,
+				0, cos(-5 * Pi / 180), sin(-5 * Pi / 180),
+				0, -sin(-5 * Pi / 180), cos(-5 * Pi / 180);
+			R_Z << cos(omiga_earth * delt_t), sin(omiga_earth * delt_t), 0,
+				-sin(omiga_earth * delt_t), cos(omiga_earth * delt_t), 0,
+				0, 0, 1;
 			P = R_Z * R_X * P_GK;
-
-			// 计算卫星位置
 			Sat_Pos->X = cos(omiga_earth * dt) * P(0, 0) + sin(omiga_earth * dt) * P(1, 0);
 			Sat_Pos->Y = cos(omiga_earth * dt) * P(1, 0) - sin(omiga_earth * dt) * P(0, 0);
 			Sat_Pos->Z = P(2, 0);
@@ -386,7 +374,7 @@ double Hopefield(double E, double H)
 	double hd = 40136 + 148.72 * (Ts - 273.16);
 
 	// 计算标准大气压和相对湿度
-	double Ps = P0 * pow(1 - 0.000026 * (H - H0), 5.225);
+	double Ps = P0 * pow(1 - 0.0000226 * (H - H0), 5.225);
 	double RH = RH0 * exp(-0.0006396 * (H - H0));
 
 	// 计算饱和水汽压力
@@ -596,6 +584,8 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
 	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
 
+	double p_pos = 0;
+
 	// 循环遍历卫星
 	for (int i = 0; i < Sates.size(); i++)
 	{
@@ -613,7 +603,7 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 			continue;
 
 		// 获取测量值
-		double measure = get_measure(Sates[i], cfg, eph[prn - 1]);
+		double measure = get_measure(Sates[i], cfg, eph[prn - 1], p_pos);
 		if (!measure)
 			continue;
 
@@ -645,7 +635,7 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		// 检查是否为首次定位
 		if (!data->LS_first)
 		{
-			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
+			if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(cfg.Ele_Mask))
 				continue;
 		}
 
@@ -681,14 +671,27 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		B_pos_new(0, 3) = 1;
 		l_pos_new(0, 0) = w_pos;
 		l_vel_new(0, 0) = w_vel;
+		ROWS++;
 
-		// 更新B、l矩阵
+		// 更新B、l、P矩阵
 		B.conservativeResize(B.rows() + 1, B.cols());
 		B.bottomRows(1) = B_pos_new;
 		l_Pos.conservativeResize(l_Pos.rows() + 1, l_Pos.cols());
 		l_Pos.bottomRows(1) = l_pos_new;
 		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
 		l_Vel.bottomRows(1) = l_vel_new;
+		if (ROWS == 1)
+		{
+			P_Pos = MatrixXd::Identity(1, 1);
+			P_Pos(0, 0) = p_pos;
+		}
+		else
+		{
+			MatrixXd temp_P = MatrixXd::Identity(ROWS, ROWS);
+			temp_P.block(0, 0, P_Pos.rows(), P_Pos.cols()) = P_Pos;
+			temp_P(ROWS - 1, ROWS - 1) = p_pos;
+			P_Pos = temp_P;
+		}
 
 		// 根据卫星系统类型记录卫星PRN
 		switch (sys)
@@ -702,7 +705,6 @@ unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys)
 		default:
 			break;
 		}
-		ROWS++;
 	}
 
 	// 初始化权阵矩阵
@@ -778,6 +780,9 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 
 	// 获取接收机位置和接收机钟差
 	XYZ RcvPos = get_XYZ(data->temp_ref.block(0, 0, 3, 1));
+	MatrixXd RcvVel(4, 4);
+	RcvVel.block(0, 0, 3, 1) = data->KF->getState_minus().block(3, 0, 3, 1);
+	RcvVel(3,0)= data->KF->getState_minus()(cfg.SYS_num + 6, 0);
 	double dt_Rcv = data->temp_ref(3, 0);
 	XYZ sate_pos, sate_pos1;
 	double clk = 0;
@@ -789,7 +794,8 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 	MatrixXd B_pos_new = MatrixXd::Zero(1, 4);
 	MatrixXd l_pos_new = MatrixXd::Zero(1, 1);
 	MatrixXd l_vel_new = MatrixXd::Zero(1, 1);
-
+	MatrixXd P_Pos;
+	double p_pos = 0;
 	// 循环遍历卫星
 	for (int i = 0; i < Sates.size(); i++)
 	{
@@ -807,7 +813,7 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 			continue;
 
 		// 获取测量值
-		double measure = get_measure(Sates[i], cfg, eph[prn - 1]);
+		double measure = get_measure(Sates[i], cfg, eph[prn - 1], p_pos);
 		if (!measure)
 			continue;
 
@@ -836,8 +842,8 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 			SAT_POS_CAL(ts - clk1 + tgd + 1e-3, eph[prn - 1], &sate_pos1, clk1, Sates[i]->PSERA[0] / velocity_c, Sates[i]->SYS);
 		}
 
-		// 检查仰角是否小于10度
-		if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(10))
+		// 检查仰角是否小于阈值
+		if (Ele_Angle(sate_pos, RcvPos, Sates[i]->SYS) < degree2rad(cfg.Ele_Mask))
 			continue;
 
 		// 计算卫星速度
@@ -849,20 +855,6 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		// 计算方位角对应的波长和长度
 		double lamda = (1e-6 * velocity_c / f);
 		double len = sqrt(SQR(RcvPos.X - sate_pos.X) + SQR(RcvPos.Y - sate_pos.Y) + SQR(RcvPos.Z - sate_pos.Z));
-
-		// 计算预测值
-		double w_pos = measure - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
-		double v0 = ((sate_pos.X - RcvPos.X) * velocity[0] + (sate_pos.Y - RcvPos.Y) * velocity[1] + (sate_pos.Z - RcvPos.Z) * velocity[2]) / len;
-		double w_vel = -lamda * Sates[i]->DOPPLER[Index] - (v0 - velocity[3]);
-
-		// 检查预测值是否大于10
-		if (abs(w_pos) > cfg.w_thresh)
-			continue;
-
-		// 检查预测速度是否大于10
-		if (abs(w_vel) > cfg.w_thresh)
-			continue;
-
 		// 构造卡尔曼滤波问题的设计矩阵B和观测矩阵l
 		double l = (RcvPos.X - sate_pos.X) / len;
 		double m = (RcvPos.Y - sate_pos.Y) / len;
@@ -871,8 +863,22 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		B_pos_new(0, 1) = m;
 		B_pos_new(0, 2) = n;
 		B_pos_new(0, 3) = 1;
+		// 计算预测值
+		double w_pos = measure - (len + dt_Rcv - velocity_c * clk + Hopefield(sate_pos, RcvPos, Sates[i]->SYS));
+		double v0 = ((sate_pos.X - RcvPos.X) * velocity[0] + (sate_pos.Y - RcvPos.Y) * velocity[1] + (sate_pos.Z - RcvPos.Z) * velocity[2]) / len;
+		double w_vel = -lamda * Sates[i]->DOPPLER[Index] - (v0 - velocity[3]) - (B_pos_new * RcvVel)(0, 0);
+
+		// 检查预测值是否大于阈值
+		if (abs(w_pos) > cfg.w_thresh)
+			continue;
+
+		// 检查预测速度是否大于阈值
+		if (abs(w_vel) > cfg.w_thresh)
+			continue;
+
 		l_pos_new(0, 0) = w_pos;
 		l_vel_new(0, 0) = w_vel;
+		ROWS++;
 
 		// 更新B、l矩阵
 		B.conservativeResize(B.rows() + 1, B.cols());
@@ -881,6 +887,18 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		l_Pos.bottomRows(1) = l_pos_new;
 		l_Vel.conservativeResize(l_Vel.rows() + 1, l_Vel.cols());
 		l_Vel.bottomRows(1) = l_vel_new;
+		if (ROWS == 1)
+		{
+			P_Pos = MatrixXd::Identity(1, 1);
+			P_Pos(0, 0) = p_pos;
+		}
+		else
+		{
+			MatrixXd temp_P = MatrixXd::Identity(ROWS, ROWS);
+			temp_P.block(0, 0, P_Pos.rows(), P_Pos.cols()) = P_Pos;
+			temp_P(ROWS - 1, ROWS - 1) = p_pos;
+			P_Pos = temp_P;
+		}
 
 		// 根据卫星系统类型记录卫星PRN
 		switch (sys)
@@ -894,12 +912,18 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		default:
 			break;
 		}
-		ROWS++;
+
+		if (ROWS == 3)
+			break;
 	}
 
 	// 如果卫星数为0，返回0
 	if (ROWS == 0)
 		return 0;
+
+	MatrixXd R = MatrixXd::Identity(ROWS + ROWS, ROWS + ROWS);
+	R.block(0, 0, ROWS, ROWS) = P_Pos;
+	R.block(ROWS, ROWS, ROWS, ROWS) = MatrixXd::Identity(ROWS, ROWS) * 0.18;
 
 	// 更新Kalman Filter对象的H、R、Z矩阵
 	data->KF->set_H(getH(B));
@@ -931,7 +955,7 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 //   - eph: 星历数据结构体指针
 // 返回值: 测量值
 
-double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph)
+double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph, double &p)
 {
 	// 声明变量
 	double measure = 0;
@@ -979,6 +1003,7 @@ double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph)
 	if (cfg.phase_num == 1)
 	{
 		measure = Sate->PSERA[Index1];
+		p = SQR(Sate->PSE_PREC[Index1]);
 	}
 	else if (cfg.phase_num == 2)
 	{
@@ -996,6 +1021,7 @@ double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph)
 
 		// 计算测量值（无电离层组合）
 		measure = SQR(f1) * Sate->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sate->PSERA[Index2] / (SQR(f1) - SQR(f2));
+		p = SQR(SQR(f1) * Sate->PSE_PREC[Index1] / (SQR(f1) - SQR(f2))) + SQR(SQR(f2) * Sate->PSE_PREC[Index2] / (SQR(f1) - SQR(f2)));
 
 		// 对于BDS系统，加上TGD1对应的钟差改正
 		if (Sate->SYS == SYS_BDS)
@@ -1100,23 +1126,26 @@ unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg) {
 		// 从最小二乘解中提取状态向量
 		MatrixXd state(8, 1);
 		state.block(0, 0, 3, 1) = data->LS_Pos->X.block(0, 0, 3, 1);
-
+		state.block(3, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
 		// 根据系统编号配置状态向量
 		if (cfg.SYS_num == 1) {
-			state.block(4, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
-			state(3, 0) = data->LS_Pos->X(3, 0);
+			state(6, 0) = data->LS_Pos->X(3, 0);
 			state(7, 0) = data->LS_Vel->X(3, 0);
 		}
 		else if (cfg.SYS_num == 2) {
 			state.conservativeResize(9, 1);
-			state.block(5, 0, 3, 1) = data->LS_Vel->X.block(0, 0, 3, 1);
-			state(3, 0) = data->LS_Pos->X(3, 0);
-			state(4, 0) = data->LS_Pos->X(4, 0);
+			state(6, 0) = data->LS_Pos->X(3, 0);
+			state(7, 0) = data->LS_Pos->X(4, 0);
 			state(8, 0) = data->LS_Vel->X(3, 0);
 		}
 
 		// 设置卡尔曼滤波器状态
 		data->KF->setState(state);
+		data->KF_GPS_num = data->LS_GPS_num;
+		data->KF_BDS_num = data->LS_BDS_num;
+		*data->KF_SATES = *(data->LS_SATES);
+		data->KF_result = Success_Solve;
+		return 1;
 	}
 
 	// 重置卡尔曼滤波器并进行预测
@@ -1151,17 +1180,14 @@ int DATA_SET::Set_KF(Configure cfg) {
 	// 根据系统编号配置GPS和BDS的接收机钟差
 	if (cfg.SYS_num == 1) {
 		if (cfg.GPS_Cfg.used)
-			dt_G = KF->getState_minus()(3, 0);
+			dt_G = KF->getState_minus()(6, 0);
 		if (cfg.BDS_Cfg.used)
-			dt_C = KF->getState_minus()(3, 0);
+			dt_C = KF->getState_minus()(6, 0);
 	}
 	else if (cfg.SYS_num == 2) {
-		dt_G = KF->getState_minus()(3, 0);
-		dt_C = KF->getState_minus()(4, 0);
+		dt_G = KF->getState_minus()(6, 0);
+		dt_C = KF->getState_minus()(7, 0);
 	}
-
-	// 设置参考状态向量的前三个元素
-	temp_ref.topRows(3) = KF->getState_minus().block(0, 0, 3, 1);
 
 	// 根据配置信息设置GPS的状态向量
 	if (cfg.GPS_Cfg.used) {

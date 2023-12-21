@@ -163,33 +163,6 @@ unsigned int decode_GPSEPH_STAT(unsigned char* buff, EPHEMERIS* epoch)
 	return 1;
 }
 
-unsigned int decode_GPSEPH(unsigned char* buff, EPOCH* gpse)
-{
-	int prn = U4(buff);
-	gpse[prn - 1].PRN = prn;
-	int wn = U4(buff + 24);
-	double toe = R8(buff + 32);
-	int check = 1;//默认不存在重复数据
-	for (int i = 0; i < gpse[prn - 1].num; i++)			//检查是否存在重复星历数据
-	{
-		if (wn == gpse[prn - 1].epoch[i]->toe_wn && toe == gpse[prn - 1].epoch[i]->toe_tow)
-			check = 0;
-	}
-	if (check)
-	{
-		EPHEMERIS* e = new EPHEMERIS();
-		decode_GPSEPH_STAT(buff, e);
-		gpse[prn - 1].epoch.push_back(e);
-		gpse[prn - 1].num++;
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
-
-}
-
 unsigned int decode_BDSEPH_STAT(unsigned char* buff, EPHEMERIS* bdse)
 {
 	bdse->PRN = U4(buff);
@@ -222,32 +195,6 @@ unsigned int decode_BDSEPH_STAT(unsigned char* buff, EPHEMERIS* bdse)
 	bdse->Cis = R8(buff + 188);
 
 	return 1;
-}
-
-unsigned int decode_BDSEPH(unsigned char* buff, EPOCH* bdse)
-{
-	int prn = U4(buff);
-	bdse[prn - 1].PRN = prn;
-	int wn = U4(buff + 4);
-	int toe = U4(buff + 72);
-	int check = 1;//默认不存在重复数据
-	for (int i = 0; i < bdse[prn - 1].num; i++)
-	{
-		if (wn == bdse[prn - 1].epoch[i]->toe_wn && toe == bdse[prn - 1].epoch[i]->toe_tow)
-			check = 0;
-	}
-	if (check)
-	{
-		EPHEMERIS* e = new EPHEMERIS();
-		decode_BDSEPH_STAT(buff, e);
-		bdse[prn - 1].epoch.push_back(e);
-		bdse[prn - 1].num++;
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
 }
 
 int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
@@ -340,4 +287,144 @@ int decodestream(DATA_SET* result, unsigned char Buff[], int& d)
 	d = j; // 解码后，缓存中剩余的尚未解码的字节数
 	//---------------解码后，缓存的处理-------------------//
 	return val;
+}
+
+int decodefile(DATA_SET* result, Configure cfg, const char* path)
+{
+	unsigned char data, buff[MAXRAWLEN];
+	FILE* FObs;
+	int len, headlen;
+	int msgID, msgTYPE;
+	GPSTIME* gpstime;
+	int key = 0;
+	double dt_epoch = 1; // 文件流历元间时间差
+	double temp_t = 0;
+	FILE* Pos_Fobs;
+	FILE* KF_Fobs;
+	if ((FObs = fopen(path, "rb")) == NULL)
+	{
+		printf("未能打开文件\n");
+		return -1;
+	}
+
+	if ((Pos_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Static-LS3.pos", "w")) == NULL)
+	{
+		printf("The pos file %s was not opened\n", "Dyna - LS.pos");
+		exit(0);
+	}
+
+	if ((KF_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Static-KF3.kf", "w")) == NULL)
+	{
+		printf("The kf file %s was not opened\n", "KF.pos");
+		exit(0);
+	}
+
+	int i;
+	for (i = 0;; i++)
+	{
+		/*文件预处理*/
+		if (fread(&data, 1, 1, FObs) < 1)
+		{
+			cout << "END OF FILE!" << endl;
+			fclose(FObs);
+			return -2;
+		}
+		if (check_syn(buff, data))
+		{
+			key++;
+			if (fread(buff + 3, 1, 7, FObs) < 7)
+			{
+				cout << "END OF FILE!" << endl;
+				fclose(FObs);
+				return -2;
+			}
+			if (headlen = U1(buff + 3) != OEM4HLEN)
+			{
+				cout << "HEADLENGTH ERROR!" << endl;
+				fclose(FObs);
+				return -1;
+			}
+			if ((len = U2(buff + 8) + OEM4HLEN) > MAXRAWLEN - 4)//检查数据长度，为数据头+数据，不包括CRC校验码
+			{
+				cout << "END OF FILE!" << endl;
+				fclose(FObs);
+				return -2;
+			}
+
+			if (fread(buff + 10, len - 6, 1, FObs) < 1)//读取包括CRC在内的所有内容
+			{
+				cout << "END OF FILE!" << endl;
+				fclose(FObs);
+				return -2;
+			}
+
+
+			if (CRC32(buff, len) != UCRC32(buff + len, 4))//检验CRC32
+			{
+				cout << "DATA ERROR! " << i << endl;
+				continue;
+			}
+
+			/*录入文件头信息*/
+			msgID = U2(buff + 4);
+			msgTYPE = (U1(buff + 6) >> 4) & 0X3;
+			gpstime = new GPSTIME(U2(buff + 14), (double)(U4(buff + 16) * 1e-3));
+			int prn = 0;
+			/*处理不同数据信息*/
+			switch (msgID)
+			{
+			case ID_RANGE:
+				result->range->OBS_TIME->Week = gpstime->Week;
+				result->range->OBS_TIME->SecOfWeek = gpstime->SecOfWeek;
+				result->OBSTIME->Week = gpstime->Week;
+				result->OBSTIME->SecOfWeek = gpstime->SecOfWeek;
+				result->range->Sate_Num = U4(buff + OEM4HLEN);
+				decode_RANGE(buff + OEM4HLEN + 4, result->range->Sate_Num, result->range);
+				if (result->LS_first)
+					dt_epoch = 1;
+				else
+					dt_epoch = result->OBSTIME->SecOfWeek - temp_t;
+
+				if (dt_epoch == 0)
+					break;
+
+				temp_t = result->OBSTIME->SecOfWeek;
+				result->DetectOut(cfg, dt_epoch);
+
+				if (cfg.LS_used)
+				{
+					if (LS_SPV(result, cfg))
+						result->LS_first = false;
+					cout << "LS" << endl;
+					result->LS_print(cfg);              // 输出至控制台
+					result->LS_Filewrite(Pos_Fobs, cfg); // 输出至文件
+				}
+
+				if (cfg.KF_used)
+				{
+					if (KF_SPV(result, dt_epoch, cfg))
+						result->KF_first = false;
+
+					cout << "KF" << endl;
+					result->KF_Print(KF_Fobs, cfg);
+				}
+
+				result->reset();
+				break;
+			case ID_GPSEPHEMERIS:
+				prn = U4(buff + OEM4HLEN);
+				decode_GPSEPH_STAT(buff + OEM4HLEN, result->GPS_eph[prn - 1]);
+				break;
+			case ID_BDSEPHEMERIS:
+				prn = U4(buff + OEM4HLEN);
+				decode_BDSEPH_STAT(buff + OEM4HLEN, result->BDS_eph[prn - 1]);
+				break;
+			default:
+				break;
+			}
+			delete gpstime;
+		}
+	}
+
+	return 1;
 }

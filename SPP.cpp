@@ -73,78 +73,7 @@ int main()
 	case 1:
 		cout << "请输入文件路径" << endl;
 		cin >> load_filepath;
-
-		if ((file = fopen(load_filepath, "rb")) == NULL)
-		{
-			printf("The obs file %s was not opened\n", load_filepath);
-			exit(0);
-		}
-
-		if ((Pos_Fobs = fopen(CfgInfo.ResDatFile, "w")) == NULL)
-		{
-			printf("The pos file %s was not opened\n", CfgInfo.ResDatFile);
-			exit(0);
-		}
-
-		if ((KF_Fobs = fopen(CfgInfo.KFDatFile, "w")) == NULL)
-		{
-			printf("The kf file %s was not opened\n", "KF.pos");
-			exit(0);
-		}
-
-		do
-		{
-			//Sleep(98);
-			lenR = fread(curbuff, sizeof(unsigned char), MAXRAWLEN / 4, file);
-
-			if ((lenD + lenR) > 2 * MAXRAWLEN)
-				lenD = 0;
-
-			memcpy(decBuff + lenD, curbuff, lenR); // 缓存拼接
-			lenD += lenR;
-
-			ReadFlag = decodestream(result, decBuff, lenD); // 解码
-
-			if (ReadFlag != 1)
-			{
-				printf("Data acquisition and decode failed \n");
-				continue;
-			}
-			else
-			{
-				if (result->LS_first)
-					dt_epoch = 1;
-				else
-					dt_epoch = result->OBSTIME->SecOfWeek - temp_t;
-
-				if (dt_epoch == 0)
-					break;
-
-				temp_t = result->OBSTIME->SecOfWeek;
-				result->DetectOut(CfgInfo, dt_epoch);
-
-				if (CfgInfo.LS_used)
-				{
-					if (LS_SPV(result, CfgInfo))
-						result->LS_first = false;
-					cout << "LS" << endl;
-					result->LS_print(CfgInfo);              // 输出至控制台
-					result->LS_Filewrite(Pos_Fobs, CfgInfo); // 输出至文件
-				}
-
-				if (CfgInfo.KF_used)
-				{
-					if (KF_SPV(result, dt_epoch, CfgInfo))
-						result->KF_first = false;
-
-					cout << "KF" << endl;
-					result->KF_Print(KF_Fobs, CfgInfo);
-				}
-
-				result->reset();
-			}
-		} while (lenR);
-
+		decodefile(result, CfgInfo, load_filepath);
 		break;
 
 	case 2:

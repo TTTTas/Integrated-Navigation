@@ -45,7 +45,7 @@ private:
     MatrixXd P_minus_;     // 预测估计误差协方差
 
     MatrixXd K_; // 卡尔曼增益
-    MatrixXd delt_z; //观测值
+    MatrixXd z_ ; //观测值
 };
 
 MatrixXd getA(double T, Configure cfg);

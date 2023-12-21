@@ -6,7 +6,7 @@ KalmanFilter::KalmanFilter(MatrixXd initial_state, MatrixXd initial_covariance)
 {
 	A_ = MatrixXd::Identity(initial_state.rows(), initial_state.rows());
 	H_ = MatrixXd::Zero(0, 0);
-	delt_z = MatrixXd::Zero(0, 0);
+	z_ = MatrixXd::Zero(0, 0);
 	R_ = MatrixXd::Zero(0, 0);
 	x_hat_ = initial_state;
 	P_ = initial_covariance;
@@ -21,7 +21,7 @@ void KalmanFilter::predict()
 void KalmanFilter::update()
 {
 	K_ = P_minus_ * H_.transpose() * (H_ * P_minus_ * H_.transpose() + R_).inverse();
-	x_hat_ = x_hat_minus_ + K_ * delt_z;
+	x_hat_ = x_hat_minus_ + K_ * (z_);
 	P_ = (MatrixXd::Identity(x_hat_.rows(), x_hat_.rows()) - K_ * H_) * P_minus_;
 }
 
@@ -40,37 +40,37 @@ void KalmanFilter::set_H(MatrixXd H)
 		int Last_col = H.cols();
 		int temp_row = H.rows() / 2;
 		int temp_col = H.cols();
-		MatrixXd B_pos = H_.block(0, 0, last_row, Last_col - 4);
-		MatrixXd B_vel = H_.block(last_row, Last_col - 4, last_row, 4);
-		MatrixXd B_pos_add = H.block(0, 0, temp_row, temp_col - 4);
-		MatrixXd B_vel_add = H.block(temp_row, temp_col - 4, temp_row, 4);
+		MatrixXd B_pos = H_.block(0, 0, last_row, 3);
+		MatrixXd B_vel = H_.block(last_row, 3, last_row, 3);
+		int sys_num = Last_col - 7;
+		MatrixXd B_old_one = H.block(0, 6, last_row, sys_num);
+		MatrixXd B_pos_add = H.block(0, 0, temp_row, 3);
+		MatrixXd B_vel_add = H.block(temp_row, 3, temp_row, 3);
+		MatrixXd B_add_one = H.block(0, 6, temp_row, 1);
 
-		int last_col = B_pos.cols();
-		B_pos.conservativeResize(last_row + temp_row, last_col + 1);
-		B_pos.block(last_row, 0, temp_row, 3) = B_pos_add.leftCols(3);
-		B_pos.block(0, last_col, last_row, 1) = MatrixXd::Zero(last_row, 1);
-		B_pos.block(last_row, last_col, temp_row, 1) = MatrixXd::Constant(temp_row, 1, 1);
-		B_pos.block(last_row, 3, temp_row, last_col - 3) = MatrixXd::Zero(temp_row, last_col - 3);
+		B_pos.conservativeResize(last_row + temp_row, 3);
+		B_pos.bottomRows(temp_row) = B_pos_add;
 
-		B_vel.conservativeResize(B_vel.rows() + B_vel_add.rows(), 4);
+		B_vel.conservativeResize(last_row + temp_row, 3);
 		B_vel.bottomRows(B_vel_add.rows()) = B_vel_add;
 
-		H_.conservativeResize(B_pos.rows() + B_vel.rows(), B_pos.cols() + B_vel.cols());
-		H_.block(0, 0, B_pos.rows(), B_pos.cols()) = B_pos;
-		H_.block(B_pos.rows(), B_pos.cols(), B_vel.rows(), B_vel.cols()) = B_vel;
-		H_.block(0, B_pos.cols(), B_pos.rows(), B_vel.cols()) = MatrixXd::Zero(B_pos.rows(), B_vel.cols());
-		H_.block(B_pos.rows(), 0, B_vel.rows(), B_pos.cols()) = MatrixXd::Zero(B_vel.rows(), B_pos.cols());
+		H_ = MatrixXd::Zero(B_pos.rows() + B_vel.rows(), 6 + sys_num + 2);
+		H_.block(0, 0, B_pos.rows(), 3) = B_pos;
+		H_.block(B_pos.rows(), 3, B_vel.rows(), 3) = B_vel;
+		H_.block(0, 6, last_row, sys_num) = B_old_one;
+		H_.block(last_row, 6 + sys_num, temp_row, 1) = B_add_one;
+		H_.block(B_pos.rows(), 7 + sys_num, temp_row, 1) = B_add_one;
 	}
 }
 
 void KalmanFilter::set_Z(MatrixXd z)
 {
-	if (delt_z.rows() == 0)
-		delt_z = z;
+	if (z_.rows() == 0)
+		z_ = z;
 	else
 	{
-		delt_z.conservativeResize(delt_z.rows() + z.rows(), 1);
-		delt_z.bottomRows(z.rows()) = z;
+		z_.conservativeResize(z_.rows() + z.rows(), 1);
+		z_.bottomRows(z.rows()) = z;
 	}
 }
 
@@ -113,13 +113,12 @@ void KalmanFilter::set_R(MatrixXd R)
 void KalmanFilter::setState(MatrixXd state)
 {
 	x_hat_ = state;
-	x_hat_minus_ = state;
 }
 
 void KalmanFilter::reset()
 {
 	H_ = MatrixXd::Zero(0, 0);
-	delt_z = MatrixXd::Zero(0, 0);
+	z_ = MatrixXd::Zero(0, 0);
 	R_ = MatrixXd::Zero(0, 0);
 }
 
@@ -137,49 +136,53 @@ MatrixXd getA(double T, Configure cfg)
 {
 	int row = cfg.SYS_num + 7;
 	MatrixXd A = MatrixXd::Identity(row, row);
-	A.block(0, row - 4, 4, 4) = MatrixXd::Identity(4, 4) * T;
+	A.block(0, 3, 3, 3) = MatrixXd::Identity(3, 3) * T;
+	if (cfg.SYS_num == 1)
+		A(6, 7) = T;
+	else if (cfg.SYS_num == 2)
+	{
+		A(6, 8) = T;
+		A(7, 8) = T;
+	}
 	return A;
 }
 
 MatrixXd getH(MatrixXd B)
 {
 	MatrixXd H = MatrixXd::Zero(B.rows() + B.rows(), B.cols() + B.cols());
-	H.block(0, 0, B.rows(), B.cols()) = B;
-	H.block(B.rows(), B.cols(), B.rows(), B.cols()) = B;
+	H.block(0, 0, B.rows(), B.cols() - 1) = B.leftCols(3);
+	H.block(0, 6, B.rows(), 1) = B.rightCols(1);
+	H.block(B.rows(), 3, B.rows(), 3) = B.leftCols(3);
+	H.block(B.rows(), 7, B.rows(), 1) = B.rightCols(1);
 	return H;
 }
 
 MatrixXd getQ(double T, Configure cfg)
 {
-	MatrixXd Q;
-	MatrixXd Sv = MatrixXd::Identity(3, 3) * 10;
-	double St = 1;
-	double Sf = 1;
+	MatrixXd Sv = MatrixXd::Identity(3, 3) * 0.05;
+	double St = 0.05;
+	double Sf = 0.05;
+	int row = cfg.SYS_num + 7;
+	MatrixXd Q = MatrixXd::Zero(row, row);
+	Q.block(0, 0, 3, 3) = Sv * pow(T, 3) / 3;
+	Q.block(0, 3, 3, 3) = Sv * pow(T, 2) / 2;
+	Q.block(3, 0, 3, 3) = Sv * pow(T, 2) / 2;
+	Q.block(3, 3, 3, 3) = Sv * T;
 	if (cfg.SYS_num == 1)
 	{
-		Q = MatrixXd::Identity(8, 8);
-		Q.block(0, 0, 3, 3) = Sv * pow(T, 3) / 3;
-		Q.block(0, 4, 3, 3) = Sv * pow(T, 2) / 2;
-		Q.block(4, 0, 3, 3) = Sv * pow(T, 2) / 2;
-		Q.block(4, 4, 3, 3) = Sv * T;
-		Q(3, 3) = St * T + Sf * pow(T, 3) / 3;
-		Q(3, 7) = Sf * pow(T, 2) / 2;
-		Q(7, 3) = Sf * pow(T, 2) / 2;
+		Q(6, 6) = St * T + Sf * pow(T, 3) / 3;
+		Q(6, 7) = Sf * pow(T, 2) / 2;
+		Q(7, 6) = Sf * pow(T, 2) / 2;
 		Q(7, 7) = Sf * T;
 	}
 	else if (cfg.SYS_num == 2)
 	{
-		Q = MatrixXd::Identity(9, 9);
-		Q.block(0, 0, 3, 3) = Sv * pow(T, 3) / 3;
-		Q.block(0, 5, 3, 3) = Sv * pow(T, 2) / 2;
-		Q.block(5, 0, 3, 3) = Sv * pow(T, 2) / 2;
-		Q.block(4, 4, 3, 3) = Sv * T;
-		Q(3, 3) = St * T + Sf * pow(T, 3) / 3;
-		Q(3, 8) = Sf * pow(T, 2) / 2;
-		Q(8, 3) = Sf * pow(T, 2) / 2;
-		Q(4, 4) = St * T + Sf * pow(T, 3) / 3;
-		Q(4, 8) = Sf * pow(T, 2) / 2;
-		Q(8, 4) = Sf * pow(T, 2) / 2;
+		Q(6, 6) = St * T + Sf * pow(T, 3) / 3;
+		Q(6, 8) = Sf * pow(T, 2) / 2;
+		Q(8, 6) = Sf * pow(T, 2) / 2;
+		Q(7, 7) = St * T + Sf * pow(T, 3) / 3;
+		Q(7, 8) = Sf * pow(T, 2) / 2;
+		Q(8, 7) = Sf * pow(T, 2) / 2;
 		Q(8, 8) = Sf * T;
 	}
 	return Q;
@@ -188,8 +191,8 @@ MatrixXd getQ(double T, Configure cfg)
 MatrixXd getR(double ROW)
 {
 	MatrixXd R = MatrixXd::Identity(ROW + ROW, ROW + ROW);
-	R.block(0, 0, ROW, ROW) = MatrixXd::Identity(ROW, ROW) * 2.5;
-	R.block(ROW, ROW, ROW, ROW) = MatrixXd::Identity(ROW, ROW) * 0.05;
+	R.block(0, 0, ROW, ROW) = MatrixXd::Identity(ROW, ROW) * 4.5;
+	R.block(ROW, ROW, ROW, ROW) = MatrixXd::Identity(ROW, ROW) * 0.18;
 	return R;
 }
 

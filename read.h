@@ -7,6 +7,7 @@
 #include <string>
 #include <iterator>
 #include "transform.h"
+#include "Configure.h"
 
 using namespace std;
 
@@ -105,13 +106,6 @@ struct EPHEMERIS
 	int IODE2;
 };
 
-struct EPOCH
-{
-	int PRN;
-	int num = 0;
-	vector<EPHEMERIS *> epoch;
-};
-
 struct OBS_DATA
 {
 	GPSTIME *OBS_TIME = new GPSTIME();
@@ -178,12 +172,10 @@ unsigned int decode_RANGE_STAT(unsigned char *buff, Satellate *sate);
 unsigned int decode_RANGE(unsigned char *buff, int num, OBS_DATA *obs);
 /*解码单颗GPS卫星星历*/
 unsigned int decode_GPSEPH_STAT(unsigned char *buff, EPHEMERIS *epoch);
-/*解码所有GPS卫星星历*/
-unsigned int decode_GPSEPH(unsigned char *buff, EPOCH *gpse);
 /*解码单颗BDS卫星星历*/
 unsigned int decode_BDSEPH_STAT(unsigned char *buff, EPHEMERIS *bdse);
-/*解码所有BDS卫星星历*/
-unsigned int decode_BDSEPH(unsigned char *buff, EPOCH *bdse);
 
 /*解码*/
 int decodestream(DATA_SET* result, unsigned char Buff[], int& d);
+
+int decodefile(DATA_SET* result, Configure cfg, const char* path);

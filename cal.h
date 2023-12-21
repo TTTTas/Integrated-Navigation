@@ -48,7 +48,7 @@ using namespace std;
 
 /*粗差探测阈值*/
 #define GF_THRESH 0.05
-#define MW_THRESH 10
+#define MW_THRESH 5
 
 /*平方数*/
 double SQR(double x);
@@ -89,33 +89,14 @@ double Hopefield(XYZ SatPos, XYZ RcvPos, int sys);
 /*Klobuchar模型改正电离层*/
 double Klobuchar(XYZ RcvPos, double E, double A, double alpha[4], double beta[4], double UT, double code, int sys);
 
-/*文件流下SPP解算*/
-// 搭建位置解算构造矩阵(双频)
-unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, bool first_flag, double f1, double f2, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used);
-
-// 搭建位置解算构造矩阵(单频)
-unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, bool first_flag, double f, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used);
-
-// 搭建速度解算构造矩阵
-unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPOCH *eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
-
 /*网口下位置解算*/
-// 搭建位置解算构造矩阵(双频)
-unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, bool first_flag, double f1, double f2, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used);
-
-// 搭建位置解算构造矩阵(单频)
-unsigned int setup_Pos(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, bool first_flag, double f, MatrixXd *B_Pos, MatrixXd *l_Pos, MatrixXd *P_Pos, string *sate_used);
-
-// 搭建速度解算构造矩阵
-unsigned int setup_Vel(GPSTIME *OBS_TIME, MatrixXd Pos, vector<Satellate *> Sates, EPHEMERIS **eph, MatrixXd *B_Vel, MatrixXd *l_Vel, MatrixXd *P_Vel);
-
 unsigned int LS_SPV(DATA_SET* data, Configure cfg);
 
 unsigned int setup_LS(DATA_SET* data, Configure cfg, int sys);
 
 unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys);
 
-double get_measure(Satellate* sate, Configure cfg, EPHEMERIS* eph);
+double get_measure(Satellate* sate, Configure cfg, EPHEMERIS* eph, double &p);
 
 // SPP单点定位KF
 unsigned int KF_SPV(DATA_SET* data, double dt_e, Configure cfg);
