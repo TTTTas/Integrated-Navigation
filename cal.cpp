@@ -912,9 +912,6 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 		default:
 			break;
 		}
-
-		if (ROWS == 3)
-			break;
 	}
 
 	// 如果卫星数为0，返回0
@@ -948,89 +945,90 @@ unsigned int setup_KF(DATA_SET* data, Configure cfg, int sys)
 }
 
 
-// 函数名: get_measure
-// 输入参数:
-//   - Sate: 卫星信息结构体指针
-//   - cfg: 配置信息结构体
-//   - eph: 星历数据结构体指针
-// 返回值: 测量值
+	// 函数名: get_measure
+	// 输入参数:
+	//   - Sate: 卫星信息结构体指针
+	//   - cfg: 配置信息结构体
+	//   - eph: 星历数据结构体指针
+	//   - p: 权重
+	// 返回值: 测量值
 
-double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph, double &p)
-{
-	// 声明变量
-	double measure = 0;
-	double f1 = 0;
-	double f2 = 0;
-
-	// 根据卫星系统类型选择相应的频率
-	switch (Sate->SYS)
+	double get_measure(Satellate* Sate, Configure cfg, EPHEMERIS* eph, double &p)
 	{
-	case SYS_GPS:
-		f1 = cfg.GPS_Cfg.f1;
-		f2 = cfg.GPS_Cfg.f2;
-		break;
-	case SYS_BDS:
-		f1 = cfg.BDS_Cfg.f1;
-		f2 = cfg.BDS_Cfg.f2;
-		break;
-	default:
-		break;
-	}
+		// 声明变量
+		double measure = 0;
+		double f1 = 0;
+		double f2 = 0;
 
-	// 如果卫星标记为异常值，返回测量值为0
-	if (Sate->Outlier)
-		return 0;
+		// 根据卫星系统类型选择相应的频率
+		switch (Sate->SYS)
+		{
+		case SYS_GPS:
+			f1 = cfg.GPS_Cfg.f1;
+			f2 = cfg.GPS_Cfg.f2;
+			break;
+		case SYS_BDS:
+			f1 = cfg.BDS_Cfg.f1;
+			f2 = cfg.BDS_Cfg.f2;
+			break;
+		default:
+			break;
+		}
 
-	int prn = Sate->PRN;
-	int Index1 = 0;
-	int Index2 = 0;
-
-	// 查找卫星对应的频率索引
-	while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index1])) != f1 && Index1 < MAXNUM)
-		Index1++;
-	while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index2])) != f2 && Index2 < MAXNUM)
-		Index2++;
-
-	// 如果未找到对应频率索引，返回测量值为0
-	if (Index1 == MAXNUM)
-		return 0;
-
-	// 如果指定的频率1没有相应的相位和伪距观测值，返回测量值为0
-	if (!(Sate->LOCK_PSE[Index1] && Sate->LOCK_PHA[Index1]))
-		return 0;
-
-	// 根据配置的系统数目计算测量值
-	if (cfg.phase_num == 1)
-	{
-		measure = Sate->PSERA[Index1];
-		p = SQR(Sate->PSE_PREC[Index1]);
-	}
-	else if (cfg.phase_num == 2)
-	{
-		// 如果相位观测值数量小于2，返回测量值为0
-		if (Sate->Phase_NUM < 2)
+		// 如果卫星标记为异常值，返回测量值为0
+		if (Sate->Outlier)
 			return 0;
+
+		int prn = Sate->PRN;
+		int Index1 = 0;
+		int Index2 = 0;
+
+		// 查找卫星对应的频率索引
+		while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index1])) != f1 && Index1 < MAXNUM)
+			Index1++;
+		while (CODE2FREQ(decode_SYN(Sate->SYS, Sate->SYG_TYPE[Index2])) != f2 && Index2 < MAXNUM)
+			Index2++;
 
 		// 如果未找到对应频率索引，返回测量值为0
-		if (Index2 == MAXNUM)
+		if (Index1 == MAXNUM)
 			return 0;
 
-		// 如果指定的频率2没有相应的相位和伪距观测值，返回测量值为0
-		if (!(Sate->LOCK_PSE[Index2] && Sate->LOCK_PHA[Index2]))
+		// 如果指定的频率1没有相应的相位和伪距观测值，返回测量值为0
+		if (!(Sate->LOCK_PSE[Index1] && Sate->LOCK_PHA[Index1]))
 			return 0;
 
-		// 计算测量值（无电离层组合）
-		measure = SQR(f1) * Sate->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sate->PSERA[Index2] / (SQR(f1) - SQR(f2));
-		p = SQR(SQR(f1) * Sate->PSE_PREC[Index1] / (SQR(f1) - SQR(f2))) + SQR(SQR(f2) * Sate->PSE_PREC[Index2] / (SQR(f1) - SQR(f2)));
+		// 根据配置的系统数目计算测量值
+		if (cfg.phase_num == 1)
+		{
+			measure = Sate->PSERA[Index1];
+			p = SQR(Sate->PSE_PREC[Index1]);
+		}
+		else if (cfg.phase_num == 2)
+		{
+			// 如果相位观测值数量小于2，返回测量值为0
+			if (Sate->Phase_NUM < 2)
+				return 0;
 
-		// 对于BDS系统，加上TGD1对应的钟差改正
-		if (Sate->SYS == SYS_BDS)
-			measure += velocity_c * SQR(f2 / f1) * eph->T_GD1 / (1 - SQR(f2 / f1));
+			// 如果未找到对应频率索引，返回测量值为0
+			if (Index2 == MAXNUM)
+				return 0;
+
+			// 如果指定的频率2没有相应的相位和伪距观测值，返回测量值为0
+			if (!(Sate->LOCK_PSE[Index2] && Sate->LOCK_PHA[Index2]))
+				return 0;
+
+			// 计算测量值（无电离层组合）
+			measure = SQR(f1) * Sate->PSERA[Index1] / (SQR(f1) - SQR(f2)) - SQR(f2) * Sate->PSERA[Index2] / (SQR(f1) - SQR(f2));
+			p = SQR(SQR(f1) * Sate->PSE_PREC[Index1] / (SQR(f1) - SQR(f2))) + SQR(SQR(f2) * Sate->PSE_PREC[Index2] / (SQR(f1) - SQR(f2)));
+
+			// 对于BDS系统，加上TGD1对应的钟差改正
+			if (Sate->SYS == SYS_BDS)
+				measure += velocity_c * SQR(f2 / f1) * eph->T_GD1 / (1 - SQR(f2 / f1));
+		}
+
+		// 返回计算得到的测量值
+		return measure;
 	}
-
-	// 返回计算得到的测量值
-	return measure;
-}
 
 
 // 函数名: LS_SPV

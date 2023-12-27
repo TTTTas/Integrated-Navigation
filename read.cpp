@@ -307,13 +307,13 @@ int decodefile(DATA_SET* result, Configure cfg, const char* path)
 		return -1;
 	}
 
-	if ((Pos_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Static-LS3.pos", "w")) == NULL)
+	if ((Pos_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Dyna-LS.pos", "w")) == NULL)
 	{
 		printf("The pos file %s was not opened\n", "Dyna - LS.pos");
 		exit(0);
 	}
 
-	if ((KF_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Static-KF3.kf", "w")) == NULL)
+	if ((KF_Fobs = fopen("D:\\GitHub\\Integrated-Navigation\\draw\\Dyna-KF.kf", "w")) == NULL)
 	{
 		printf("The kf file %s was not opened\n", "KF.pos");
 		exit(0);
